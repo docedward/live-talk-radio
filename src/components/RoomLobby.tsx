@@ -94,18 +94,30 @@ export function RoomLobby({ roomId }: Props) {
     }
   }
 
-  async function copyLink() {
+  async function shareOrCopyLink() {
     const url = window.location.href;
+    const title = snapshot?.room.name || "Live Talk Radio";
+
+    // Phones: system share sheet is easier than clipboard + tiny buttons
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title, url, text: `Join ${title}` });
+        setShareNote("Share sheet opened.");
+        return;
+      } catch {
+        /* cancelled or failed — fall through to copy */
+      }
+    }
+
     try {
       await navigator.clipboard.writeText(url);
       const isLocal =
-        typeof window !== "undefined" &&
-        (window.location.hostname === "localhost" ||
-          window.location.hostname === "127.0.0.1");
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1";
       setShareNote(
         isLocal
-          ? "Link copied (localhost). Phones need the HTTPS tunnel link — see PHONE.md."
-          : "Link copied — send it to listeners (works on phones if this is https)."
+          ? "Link copied (localhost). Phones need the HTTPS tunnel link."
+          : "Link copied — paste it to listeners."
       );
     } catch {
       setShareNote(url);
@@ -174,47 +186,38 @@ export function RoomLobby({ roomId }: Props) {
       snapshot.liveOnAir.authorName === displayName);
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-8">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <Link
-            href="/"
-            className="text-sm text-violet-700 hover:underline dark:text-violet-300"
-          >
-            ← All rooms
-          </Link>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            {snapshot.room.name}
-          </h1>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            You are the{" "}
-            <span
-              className={
-                isHost
-                  ? "font-semibold text-violet-700 dark:text-violet-300"
-                  : "font-semibold"
-              }
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 pb-10 pt-0 sm:pt-6">
+      {/* Sticky bar: always on screen on phones — share is not buried at top-right after scroll */}
+      <div className="sticky top-0 z-40 -mx-4 border-b border-zinc-200 bg-zinc-50/95 px-4 py-3 backdrop-blur-md dark:border-zinc-800 dark:bg-black/95">
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <Link
+              href="/"
+              className="text-xs text-violet-700 hover:underline dark:text-violet-300"
             >
-              {isHost ? "host" : "listener"}
-            </span>
-            {displayName ? ` · ${displayName}` : ""}
-          </p>
-        </div>
-
-        <div className="flex flex-col items-end gap-2">
+              ← Rooms
+            </Link>
+            <h1 className="truncate text-base font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-xl">
+              {snapshot.room.name}
+            </h1>
+            <p className="truncate text-xs text-zinc-600 dark:text-zinc-400">
+              {isHost ? "Host" : "Listener"}
+              {displayName ? ` · ${displayName}` : ""}
+            </p>
+          </div>
           <button
             type="button"
-            onClick={copyLink}
-            className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+            onClick={() => void shareOrCopyLink()}
+            className="min-h-12 shrink-0 rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-violet-500 active:bg-violet-700"
           >
-            Copy share link
+            Share link
           </button>
-          {shareNote && (
-            <p className="max-w-xs text-right text-xs text-emerald-700 dark:text-emerald-300">
-              {shareNote}
-            </p>
-          )}
         </div>
+        {shareNote && (
+          <p className="mt-2 break-all text-xs text-emerald-700 dark:text-emerald-300">
+            {shareNote}
+          </p>
+        )}
       </div>
 
       {isHost && (

@@ -14,7 +14,8 @@ export function ChatPanel({ roomId, initialMessages }: Props) {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  /** Scroll only this list — never the whole page (phones were jumping to chat). */
+  const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMessages(initialMessages);
@@ -38,7 +39,9 @@ export function ChatPanel({ roomId, initialMessages }: Props) {
   }, [roomId]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
   }, [messages]);
 
   async function send(e: React.FormEvent) {
@@ -70,7 +73,10 @@ export function ChatPanel({ roomId, initialMessages }: Props) {
         </p>
       </header>
 
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-4 py-3">
+      <div
+        ref={listRef}
+        className="flex max-h-64 min-h-[10rem] flex-1 flex-col gap-2 overflow-y-auto overscroll-contain px-4 py-3 sm:max-h-none"
+      >
         {messages.length === 0 ? (
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
             No messages yet. Say hello.
@@ -88,7 +94,6 @@ export function ChatPanel({ roomId, initialMessages }: Props) {
             </div>
           ))
         )}
-        <div ref={bottomRef} />
       </div>
 
       <form
