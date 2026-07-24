@@ -8,6 +8,8 @@ import {
   moderateOnAir,
   moderateQuestion,
   removeFromPanel,
+  leaveSpeakerPanel,
+  cancelOnAirRequest,
   requestOnAir,
   submitQuestion,
   togglePanelMute,
@@ -186,6 +188,26 @@ export function QuestionQueue({
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not mute");
+    }
+  }
+
+  async function onLeavePanel() {
+    setError(null);
+    try {
+      await leaveSpeakerPanel(roomId);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not leave panel");
+    }
+  }
+
+  async function onCancelOnAir() {
+    setError(null);
+    try {
+      await cancelOnAirRequest(roomId);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not cancel");
     }
   }
 
@@ -447,9 +469,16 @@ export function QuestionQueue({
             </p>
             <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
               {iAmHostMuted
-                ? "The host muted your mic. You stay on air until they unmute or remove you."
-                : "You are on the speaker panel. Use Live voice above for mute. Host can remove you anytime."}
+                ? "The host muted your mic. You can leave the panel anytime and stay as a listener."
+                : "You are on the speaker panel. Leave the panel to go off air but stay in the room."}
             </p>
+            <button
+              type="button"
+              onClick={() => void onLeavePanel()}
+              className="mt-3 min-h-11 w-full rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
+            >
+              Leave panel (stay as listener)
+            </button>
           </div>
         )}
 
@@ -462,6 +491,13 @@ export function QuestionQueue({
               Waiting for the host to add you to the panel. You can still ask a
               text question below.
             </p>
+            <button
+              type="button"
+              onClick={() => void onCancelOnAir()}
+              className="mt-3 min-h-11 w-full rounded-xl border border-amber-600 bg-white px-4 py-2.5 text-sm font-semibold text-amber-950 dark:bg-zinc-900 dark:text-amber-100"
+            >
+              Cancel On Air request
+            </button>
           </div>
         )}
 

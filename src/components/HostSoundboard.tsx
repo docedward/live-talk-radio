@@ -55,7 +55,7 @@ export function HostSoundboard({ roomId }: Props) {
           Host soundboard
         </h2>
         <p className="text-[11px] text-amber-800/80 dark:text-amber-200/80">
-          Whole room hears these · 12 pads
+          Whole room hears these · 12 pads · replace WAVs in public/sfx anytime
         </p>
       </div>
       <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">

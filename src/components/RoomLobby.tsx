@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { RoomSnapshot } from "@/lib/types";
 import {
   fetchSnapshot,
   getShareableRoomUrl,
   joinRoom,
+  leaveRoom,
   leaveRoomBeacon,
 } from "@/lib/api";
 import { pickFreeCard, type CardId } from "@/lib/card-avatars";
@@ -65,12 +67,14 @@ function saveAvatar(id: string) {
  * (avoids the scary Next.js hydration error overlay on phones).
  */
 export function RoomLobby({ roomId }: Props) {
+  const router = useRouter();
   const [displayName, setDisplayName] = useState("");
   const [avatarId, setAvatarId] = useState<CardId | null>(null);
   const [hostCreds, setHostCreds] = useState<HostCreds | null>(null);
   const [booted, setBooted] = useState(false);
   const [snapshot, setSnapshot] = useState<RoomSnapshot | null>(null);
   const [joining, setJoining] = useState(false);
+  const [exiting, setExiting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
   const [controlNote, setControlNote] = useState<string | null>(null);
@@ -285,6 +289,24 @@ export function RoomLobby({ roomId }: Props) {
     await copyRoomLink();
   }
 
+  /** Leave room fully and go home (host or listener). */
+  async function exitRoom() {
+    if (exiting) return;
+    setExiting(true);
+    setError(null);
+    try {
+      await leaveRoom(roomId);
+    } catch {
+      /* still navigate home even if leave API fails */
+    }
+    try {
+      localStorage.removeItem(`ltr-host-${roomId}`);
+    } catch {
+      /* ignore */
+    }
+    router.push("/");
+  }
+
   // Same join UI on server + first client paint (empty name until boot finishes)
   if (!snapshot) {
     const nameReady = displayName.trim().length > 0;
@@ -420,13 +442,23 @@ export function RoomLobby({ roomId }: Props) {
               </span>
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void shareOrCopyLink()}
-            className="min-h-11 shrink-0 rounded-xl bg-[#9a3f1c] px-3 py-2.5 text-sm font-semibold text-[#fff8f0] shadow-sm hover:bg-[#b34d24] active:bg-[#7a3216] sm:px-4"
-          >
-            Share
-          </button>
+          <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => void shareOrCopyLink()}
+              className="min-h-11 rounded-xl bg-[#9a3f1c] px-3 py-2.5 text-sm font-semibold text-[#fff8f0] shadow-sm hover:bg-[#b34d24] active:bg-[#7a3216] sm:px-4"
+            >
+              Share
+            </button>
+            <button
+              type="button"
+              disabled={exiting}
+              onClick={() => void exitRoom()}
+              className="min-h-11 rounded-xl border border-[#8b3a1a] bg-white px-3 py-2.5 text-sm font-semibold text-[#8b3a1a] hover:bg-[#fff8f0] disabled:opacity-50 sm:px-4"
+            >
+              {exiting ? "Leaving…" : "Exit room"}
+            </button>
+          </div>
         </div>
 
         <div className="mt-2 flex items-stretch gap-1.5">

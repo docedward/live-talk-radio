@@ -634,6 +634,36 @@ function removeFromPanel(roomId, hostMemberId, requestId) {
   return request;
 }
 
+/**
+ * Listener leaves the speaker panel but stays in the room as a normal listener.
+ * Mic publish rights are revoked; chat / questions still work.
+ */
+function leavePanelSelf(roomId, memberId) {
+  const { state, member } = requireMember(roomId, memberId);
+  if (member.role === "host") {
+    throw new Error("Host stays on air — use Clear panel for guests");
+  }
+  const request = state.onAirRequests.find(
+    (r) => r.memberId === memberId && r.status === "live"
+  );
+  if (!request) throw new Error("You are not on the speaker panel");
+  request.status = "done";
+  request.hostMuted = false;
+  void livekitSetCanPublish(roomId, memberId, false);
+  return request;
+}
+
+/** Listener cancels a pending On Air request (still stays in the room). */
+function cancelOnAirSelf(roomId, memberId) {
+  const { state } = requireMember(roomId, memberId);
+  const request = state.onAirRequests.find(
+    (r) => r.memberId === memberId && r.status === "pending"
+  );
+  if (!request) throw new Error("No pending On Air request");
+  request.status = "rejected";
+  return request;
+}
+
 /** Host clears entire guest panel. */
 function clearOnAir(roomId, hostMemberId) {
   const { state } = requireHostMember(roomId, hostMemberId);
@@ -983,6 +1013,36 @@ async function handleApi(req, res, pathname, query, bodyPromise) {
       const memberId = sessionIdFrom(req, body);
       clearOnAir(roomId, memberId);
       sendJson(res, 200, { ok: true });
+      return true;
+    }
+
+    // POST /api/rooms/:id/on-air/leave-self — listener goes off air, stays in room
+    const leaveSelfMatch = pathname.match(
+      /^\/api\/rooms\/([^/]+)\/on-air\/leave-self$/
+    );
+    if (leaveSelfMatch && req.method === "POST") {
+      const roomId = decodeURIComponent(leaveSelfMatch[1]);
+      const memberId = sessionIdFrom(req, body);
+      const request = leavePanelSelf(roomId, memberId);
+      sendJson(res, 200, {
+        ok: true,
+        request: publicRequest(request, memberId),
+      });
+      return true;
+    }
+
+    // POST /api/rooms/:id/on-air/cancel-self — cancel pending request
+    const cancelSelfMatch = pathname.match(
+      /^\/api\/rooms\/([^/]+)\/on-air\/cancel-self$/
+    );
+    if (cancelSelfMatch && req.method === "POST") {
+      const roomId = decodeURIComponent(cancelSelfMatch[1]);
+      const memberId = sessionIdFrom(req, body);
+      const request = cancelOnAirSelf(roomId, memberId);
+      sendJson(res, 200, {
+        ok: true,
+        request: publicRequest(request, memberId),
+      });
       return true;
     }
 

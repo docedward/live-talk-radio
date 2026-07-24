@@ -169,6 +169,22 @@ export function removeFromPanel(roomId: string, requestId: string) {
   return moderateOnAir(roomId, requestId, "remove");
 }
 
+/** Listener: leave speaker panel, stay in room as listener. */
+export function leaveSpeakerPanel(roomId: string) {
+  return api<{ ok: true; request?: OnAirRequest }>(
+    `/api/rooms/${encodeURIComponent(roomId)}/on-air/leave-self`,
+    { method: "POST", body: JSON.stringify({}) }
+  );
+}
+
+/** Listener: cancel a pending On Air request. */
+export function cancelOnAirRequest(roomId: string) {
+  return api<{ ok: true; request?: OnAirRequest }>(
+    `/api/rooms/${encodeURIComponent(roomId)}/on-air/cancel-self`,
+    { method: "POST", body: JSON.stringify({}) }
+  );
+}
+
 /** Host: fire a soundboard effect for the whole room. */
 export function triggerRoomSfx(roomId: string, sound: string) {
   return api<{ ok: true; lastSfx: { id: string; sound: string; at: number } }>(
