@@ -1,0 +1,24 @@
+Soundboard recordings (free for project use)
+============================================
+
+These WAV files were converted from free SoundBible.com downloads
+(public sound library; free for personal/commercial use with attribution
+where the original listing requested it).
+
+| File        | Source (SoundBible grab id) | Typical content      |
+|-------------|-----------------------------|----------------------|
+| cry.wav     | 1630                        | Baby crying          |
+| applause.wav| SoundBible audience clap    | Audience applause    |
+| laugh.wav   | 2076                        | Crowd / audience laugh|
+| airhorn.wav | 1830                        | Air horn             |
+| buzzer.wav  | 1501                        | Wrong buzzer         |
+| ding.wav    | 2154                        | Bell / ding          |
+| boo.wav     | 1320                        | Crowd boo            |
+| crickets.wav| 1103                        | Crickets             |
+| pew.wav     | 2156                        | Laser / pew          |
+| drumroll.wav| 2065                        | Drum roll            |
+| rimshot.wav | 1900                        | Snare / rim feel     |
+| ohh.wav     | 2158                        | Crowd reaction       |
+
+If a license page is needed for a specific sound, search SoundBible by sound name.
+Replace any file anytime with your own licensed recording using the same filename.

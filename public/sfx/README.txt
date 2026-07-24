@@ -1,32 +1,24 @@
-Host soundboard audio files
-===========================
+Host soundboard — real free recordings
+======================================
 
-Current files are short studio-style WAVs (generated, free to use).
+These are actual audio recordings (not synth “cartoon” tones), converted to WAV.
 
-To use REAL free recordings (recommended for production polish):
+Source: free downloads from SoundBible.com (public free SFX library).
+See ATTRIBUTION.txt for IDs. Safe for this project’s free/demo use.
 
-1. Download free SFX (no cost for personal / most commercial use):
-   - Mixkit:  https://mixkit.co/free-sound-effects/
-   - Pixabay: https://pixabay.com/sound-effects/
-   - Freesound CC0: https://freesound.org/ (filter license = Creative Commons 0)
-   - Kenney: https://kenney.nl/assets (CC0 packs)
+| Pad      | File         | Content              |
+|----------|--------------|----------------------|
+| Cry      | cry.wav      | Baby crying          |
+| Applause | applause.wav | Audience applause    |
+| Laugh    | laugh.wav    | Crowd laugh          |
+| Horn     | airhorn.wav  | Air horn             |
+| Wrong    | buzzer.wav   | Wrong buzzer         |
+| Ding     | ding.wav     | Bell / ding          |
+| Boo      | boo.wav      | Crowd boo            |
+| Crickets | crickets.wav | Crickets             |
+| Pew      | pew.wav      | Laser / pew          |
+| Roll     | drumroll.wav | Drum roll            |
+| Rimshot  | rimshot.wav  | Snare / rimshot feel |
+| Ohh      | ohh.wav      | Crowd reaction       |
 
-2. Export/convert to WAV (or MP3) and REPLACE these filenames
-   (keep the same base name so the app finds them):
-
-   cry.wav       drumroll.wav   pew.wav       laugh.wav
-   applause.wav   ohh.wav         rimshot.wav   boo.wav
-   airhorn.wav    buzzer.wav      ding.wav      crickets.wav
-
-3. Commit the new files (only if the license allows redistribution)
-   or upload them on your host without committing if license is "use only".
-
-App load order: /sfx/<id>.wav first, then in-browser synth fallback.
-
-Suggested free searches:
-  laugh -> "crowd laugh", "sitcom laugh"
-  applause -> "audience applause light"
-  airhorn -> "air horn party"
-  buzzer -> "wrong buzzer game"
-  ding -> "notification bell correct"
-  crickets -> "crickets night"
+Replace any file with your own free/licensed recording (same filename) anytime.
