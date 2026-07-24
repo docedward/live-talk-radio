@@ -1,24 +1,21 @@
-Host soundboard — real free recordings
-======================================
+Host soundboard — short real recordings (≤ 1.8 seconds each)
+============================================================
 
-These are actual audio recordings (not synth “cartoon” tones), converted to WAV.
+| Button   | File         | Sound              |
+|----------|--------------|--------------------|
+| Baby     | cry.wav      | Baby crying        |
+| Laugh    | laugh.wav    | Crowd laugh        |
+| Applause | applause.wav | Audience applause  |
+| Boo      | boo.wav      | Crowd boo          |
+| Crowd    | ohh.wav      | Crowd reaction     |
+| Airhorn  | airhorn.wav  | Air horn           |
+| Buzzer   | buzzer.wav   | Wrong buzzer       |
+| Bell     | ding.wav     | Bell               |
+| Drums    | drumroll.wav | Drum roll (short)  |
+| Clap     | rimshot.wav  | Clap / hit         |
+| Laser    | pew.wav      | Laser              |
+| Crickets | crickets.wav | Crickets           |
 
-Source: free downloads from SoundBible.com (public free SFX library).
-See ATTRIBUTION.txt for IDs. Safe for this project’s free/demo use.
-
-| Pad      | File         | Content              |
-|----------|--------------|----------------------|
-| Cry      | cry.wav      | Baby crying          |
-| Applause | applause.wav | Audience applause    |
-| Laugh    | laugh.wav    | Crowd laugh          |
-| Horn     | airhorn.wav  | Air horn             |
-| Wrong    | buzzer.wav   | Wrong buzzer         |
-| Ding     | ding.wav     | Bell / ding          |
-| Boo      | boo.wav      | Crowd boo            |
-| Crickets | crickets.wav | Crickets             |
-| Pew      | pew.wav      | Laser / pew          |
-| Roll     | drumroll.wav | Drum roll            |
-| Rimshot  | rimshot.wav  | Snare / rimshot feel |
-| Ohh      | ohh.wav      | Crowd reaction       |
-
-Replace any file with your own free/licensed recording (same filename) anytime.
+All clips trimmed to ≤ 1.8s with a short fade-out.
+Free library sources — see ATTRIBUTION.txt.
+Replace any file (same name) to swap a pad.

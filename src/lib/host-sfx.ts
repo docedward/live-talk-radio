@@ -27,19 +27,22 @@ export type HostSfxButton = {
   emoji: string;
 };
 
-/** Registry = what the host UI shows. Order = button order. */
+/**
+ * Registry = host UI. Labels match the real recording in public/sfx/<id>.wav
+ * (all clips capped ≤ ~1.8s).
+ */
 export const HOST_SFX_BUTTONS: HostSfxButton[] = [
-  { id: "cry", label: "Cry", emoji: "👶" },
-  { id: "drumroll", label: "Roll", emoji: "🥁" },
-  { id: "pew", label: "Pew", emoji: "🔫" },
+  { id: "cry", label: "Baby", emoji: "👶" },
   { id: "laugh", label: "Laugh", emoji: "😂" },
-  { id: "applause", label: "Clap", emoji: "👏" },
-  { id: "ohh", label: "Ohh", emoji: "😮" },
-  { id: "rimshot", label: "Rimshot", emoji: "🥁" },
+  { id: "applause", label: "Applause", emoji: "👏" },
   { id: "boo", label: "Boo", emoji: "👎" },
-  { id: "airhorn", label: "Horn", emoji: "📢" },
-  { id: "buzzer", label: "Wrong", emoji: "❌" },
-  { id: "ding", label: "Ding", emoji: "🔔" },
+  { id: "ohh", label: "Crowd", emoji: "😮" },
+  { id: "airhorn", label: "Airhorn", emoji: "📢" },
+  { id: "buzzer", label: "Buzzer", emoji: "❌" },
+  { id: "ding", label: "Bell", emoji: "🔔" },
+  { id: "drumroll", label: "Drums", emoji: "🥁" },
+  { id: "rimshot", label: "Clap", emoji: "🙌" },
+  { id: "pew", label: "Laser", emoji: "🔫" },
   { id: "crickets", label: "Crickets", emoji: "🦗" },
 ];
 
