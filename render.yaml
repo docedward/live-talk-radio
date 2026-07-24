@@ -1,24 +1,32 @@
-# Render Blueprint — free Node web service for Socket.io + Next.js custom server.
-# https://render.com/docs/blueprint-spec
+# Render Blueprint — FREE web service for Live Talk Radio.
+# Cost: $0 on the Free plan (sleeps after idle; ~750 free hours/month).
+# Deploy: https://dashboard.render.com/select-repo?type=blueprint
+#   or:  https://render.com/deploy?repo=https://github.com/docedward/live-talk-radio
+#
+# Docs: https://render.com/docs/blueprint-spec
+# Free limits: https://render.com/docs/free
+
 services:
   - type: web
     name: live-talk-radio
     runtime: node
     plan: free
+    region: oregon
     buildCommand: npm install && npm run build
     startCommand: npm start
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
       - key: HOSTNAME
         value: 0.0.0.0
-      # Set in Render dashboard (do not put real secrets in git)
+      # Optional — text chat works without these. Set in dashboard for LiveKit voice.
       - key: LIVEKIT_URL
         sync: false
       - key: LIVEKIT_API_KEY
         sync: false
       - key: LIVEKIT_API_SECRET
         sync: false
-      # After deploy: set to https://your-service.onrender.com so Share is always public
+      # Optional — set after first deploy to your https://….onrender.com URL
       - key: PUBLIC_APP_URL
         sync: false
