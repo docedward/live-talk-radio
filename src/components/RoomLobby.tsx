@@ -21,7 +21,7 @@ import { RoomSfxPlayer } from "./RoomSfxPlayer";
 import { VoiceStage } from "./VoiceStage";
 import { CardAvatarPicker } from "./CardAvatarPicker";
 import { PlayingCard } from "./PlayingCard";
-import { unlockPresenceAudio } from "@/lib/presence-sounds";
+import { unlockRoomAudio } from "@/lib/room-audio";
 
 type Props = {
   roomId: string;
@@ -200,7 +200,8 @@ export function RoomLobby({ roomId }: Props) {
   async function join(name: string, hostToken?: string, card?: CardId | null) {
     setError(null);
     setJoining(true);
-    void unlockPresenceAudio();
+    // Join tap = user gesture → unlock speakers so voice + soundboard auto-play
+    void unlockRoomAudio();
 
     // Old phones sometimes leave this stuck; always clear after a hard timeout.
     const stuckTimer = window.setTimeout(() => {
@@ -513,7 +514,7 @@ export function RoomLobby({ roomId }: Props) {
       {iAmLive && (
         <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-100">
           {voiceEnabled
-            ? "You are on the speaker panel — allow the mic if prompted. Everyone in the room can hear you."
+            ? "You are on the speaker panel — allow the mic if prompted. Use Mute mic if you need a break."
             : "You are on the panel (status only — voice is not configured)."}
         </div>
       )}

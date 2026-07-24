@@ -467,8 +467,12 @@ function playBuffer(c: AudioContext, buf: AudioBuffer) {
  * Play one board sound (host click or room broadcast).
  * Prefer HTMLAudioElement first — browsers allow it more reliably after a tap
  * than Web Audio alone (fixes “host board silent / listeners hear nothing”).
+ * Respects room output Mute (voice + board).
  */
 export async function playHostSfx(id: HostSfxId): Promise<boolean> {
+  const { isRoomOutputMuted } = await import("@/lib/room-audio");
+  if (isRoomOutputMuted()) return false;
+
   await unlockHostSfx();
 
   // 1) HTML <audio> path (best after a real click)

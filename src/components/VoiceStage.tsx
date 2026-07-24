@@ -15,7 +15,15 @@ import {
   DefaultReconnectPolicy,
 } from "livekit-client";
 import { fetchVoiceToken } from "@/lib/api";
-import { isHostSfxId, playHostSfx, unlockHostSfx } from "@/lib/host-sfx";
+import { isHostSfxId, playHostSfx } from "@/lib/host-sfx";
+import {
+  applyOutputMuteToDom,
+  isRoomOutputMuted,
+  resumeRoomPlayback,
+  subscribeRoomAudio,
+  toggleRoomOutputMuted,
+  unlockRoomAudio,
+} from "@/lib/room-audio";
 import { SpeakingStrip } from "./SpeakingStrip";
 
 type Props = {
@@ -50,9 +58,21 @@ const connectOptions = {
   websocketTimeout: 30_000,
 };
 
+/** Mute remote LiveKit audio (works with webAudioMix too). */
+function applySpeakerVolume(room: Room, muted: boolean) {
+  const vol = muted ? 0 : 1;
+  room.remoteParticipants.forEach((p) => {
+    p.audioTrackPublications.forEach((pub) => {
+      const t = pub.track as { setVolume?: (v: number) => void } | undefined;
+      t?.setVolume?.(vol);
+    });
+  });
+}
+
 /**
- * Live voice with keep-alive: survive tunnel blips, tab sleep, and brief
- * network drops without blacking out the whole page.
+ * Live voice — starts automatically after join (no “Enable live sound”).
+ * Listeners hear host + board; one Mute turns off speakers.
+ * Publishers also get mic Mute / Restart.
  */
 export function VoiceStage({
   roomId,
@@ -60,7 +80,6 @@ export function VoiceStage({
   enabled,
   hostMuted = false,
 }: Props) {
-  const [started, setStarted] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [url, setUrl] = useState<string | null>(null);
   const [tokenCanPublish, setTokenCanPublish] = useState(false);
@@ -103,25 +122,29 @@ export function VoiceStage({
     [roomId]
   );
 
+  // Auto-connect as soon as voice is available (join already unlocked audio)
   useEffect(() => {
-    if (!enabled || !started) return;
+    if (!enabled) return;
+    void unlockRoomAudio();
     void refreshToken();
-  }, [enabled, started, canPublish, refreshToken]);
+  }, [enabled, canPublish, refreshToken]);
 
   // Soft token refresh while live (session stays warm)
   useEffect(() => {
-    if (!enabled || !started || !hadToken.current) return;
+    if (!enabled || !hadToken.current) return;
     const id = setInterval(() => {
       void refreshToken();
     }, 4 * 60 * 1000);
     return () => clearInterval(id);
-  }, [enabled, started, refreshToken]);
+  }, [enabled, refreshToken]);
 
   // Wake lock: try to stop the phone from sleeping mid-show
   useEffect(() => {
-    if (!started || typeof navigator === "undefined") return;
+    if (!enabled || typeof navigator === "undefined") return;
     const nav = navigator as Navigator & {
-      wakeLock?: { request: (t: "screen") => Promise<{ release: () => Promise<void> }> };
+      wakeLock?: {
+        request: (t: "screen") => Promise<{ release: () => Promise<void> }>;
+      };
     };
     if (!nav.wakeLock?.request) return;
     let sentinel: { release: () => Promise<void> } | null = null;
@@ -145,7 +168,7 @@ export function VoiceStage({
       document.removeEventListener("visibilitychange", onVis);
       void sentinel?.release();
     };
-  }, [started]);
+  }, [enabled]);
 
   if (!enabled) {
     return (
@@ -168,39 +191,11 @@ export function VoiceStage({
     );
   }
 
-  if (!started) {
-    return (
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 dark:border-emerald-900 dark:bg-emerald-950/40">
-        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
-          Live voice
-        </p>
-        <p className="mt-1 text-sm font-medium text-zinc-900 dark:text-zinc-50">
-          Tap once to stay connected to the show
-          {canPublish ? " with your mic" : ""}.
-        </p>
-        <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-          Keep this tab open. If the screen sleeps, open the tab again — voice
-          will try to reconnect automatically.
-        </p>
-        <button
-          type="button"
-          onClick={() => {
-            void unlockHostSfx();
-            setStarted(true);
-          }}
-          className="mt-3 w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-500 sm:w-auto"
-        >
-          {canPublish ? "Start live voice (mic)" : "Enable live sound"}
-        </button>
-      </div>
-    );
-  }
-
   // First connect only — never unmount the room for soft errors
   if (!token || !url) {
     return (
       <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
-        {loading ? "Connecting voice…" : loadError || "Connecting voice…"}
+        {loading ? "Connecting live sound…" : loadError || "Connecting live sound…"}
         {loadError && (
           <button
             type="button"
@@ -319,11 +314,7 @@ function VoiceKeepAlive({
 
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
-      void unlockHostSfx();
-      // Resume remote audio elements
-      document.querySelectorAll("audio").forEach((el) => {
-        void (el as HTMLAudioElement).play().catch(() => undefined);
-      });
+      void resumeRoomPlayback();
       if (
         room.state !== ConnectionState.Connected &&
         room.state !== ConnectionState.Connecting &&
@@ -332,7 +323,7 @@ function VoiceKeepAlive({
         onNeedReconnect();
         return;
       }
-      // Do not force-unmute here — that fought the Mute button and made it look stuck.
+      // Do not force-unmute mic here — that fought the Mute button.
     };
 
     document.addEventListener("visibilitychange", onVisible);
@@ -385,7 +376,8 @@ function LiveKitSfxListener() {
             seen.current = new Set([...seen.current].slice(-20));
           }
         }
-        void unlockHostSfx().then(() => playHostSfx(sound));
+        if (isRoomOutputMuted()) return;
+        void unlockRoomAudio().then(() => playHostSfx(sound));
       } catch {
         /* ignore */
       }
@@ -413,10 +405,11 @@ function VoiceChrome({
   const connectionState = useConnectionState();
   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
   const [micError, setMicError] = useState<string | null>(null);
-  const [audioHint, setAudioHint] = useState(mobile);
   const [remoteAudioCount, setRemoteAudioCount] = useState(0);
-  /** Button UI follows this — not LiveKit alone (avoids stuck black Mute). */
+  /** Mic button UI — not LiveKit alone (avoids stuck black Mute). */
   const [micOn, setMicOn] = useState(false);
+  /** Speaker output mute (voice + soundboard). */
+  const [soundMuted, setSoundMuted] = useState(isRoomOutputMuted());
   /** Only auto-enable mic once per connection. */
   const didAutoEnableMic = useRef(false);
 
@@ -424,6 +417,12 @@ function VoiceChrome({
   const connecting =
     connectionState === ConnectionState.Connecting ||
     connectionState === ConnectionState.Reconnecting;
+
+  useEffect(() => {
+    return subscribeRoomAudio(() => {
+      setSoundMuted(isRoomOutputMuted());
+    });
+  }, []);
 
   // Reset one-shot flags when we leave the room connection
   useEffect(() => {
@@ -462,22 +461,28 @@ function VoiceChrome({
     };
   }, [room]);
 
-  // When a remote track arrives, try to play all <audio> elements (autoplay policy)
+  // Auto-start room speakers (join gesture already unlocked browsers)
   useEffect(() => {
     if (!room) return;
     const kick = () => {
-      document.querySelectorAll("audio").forEach((el) => {
-        const a = el as HTMLAudioElement;
-        a.muted = false;
-        a.volume = 1;
-        void a.play().catch(() => undefined);
-      });
+      void room.startAudio().catch(() => undefined);
+      void resumeRoomPlayback();
+      applySpeakerVolume(room, isRoomOutputMuted());
     };
+    kick();
     room.on(RoomEvent.TrackSubscribed, kick);
+    room.on(RoomEvent.Connected, kick);
     return () => {
       room.off(RoomEvent.TrackSubscribed, kick);
+      room.off(RoomEvent.Connected, kick);
     };
   }, [room]);
+
+  // Keep LiveKit + DOM matched to speaker Mute
+  useEffect(() => {
+    if (room) applySpeakerVolume(room, soundMuted);
+    applyOutputMuteToDom(soundMuted);
+  }, [room, soundMuted, remoteAudioCount, connected]);
 
   // Auto-enable mic ONCE when we first connect as publisher
   useEffect(() => {
@@ -497,8 +502,8 @@ function VoiceChrome({
           setMicOn(false);
           setMicError(
             mobile
-              ? "Tap Unmute and allow the microphone."
-              : "Allow the microphone, then tap Unmute."
+              ? "Allow the microphone when prompted, then tap Unmute mic."
+              : "Allow the microphone, then tap Unmute mic."
           );
         }
       }
@@ -534,7 +539,7 @@ function VoiceChrome({
     }
   }
 
-  async function toggleMute() {
+  async function toggleMicMute() {
     if (!localParticipant || !canPublish || hostMuted) return;
     setMicError(null);
     const turnOn = !micOn;
@@ -549,100 +554,89 @@ function VoiceChrome({
     }
   }
 
-  async function pokeAudio() {
-    setAudioHint(false);
-    await unlockHostSfx();
-    try {
-      const els = document.querySelectorAll("audio");
-      for (const el of els) {
-        const a = el as HTMLAudioElement;
-        a.muted = false;
-        a.volume = 1;
-        try {
-          await a.play();
-        } catch {
-          /* ignore */
-        }
-      }
-    } catch {
-      /* ignore */
-    }
+  function toggleSoundMute() {
+    void unlockRoomAudio();
+    const next = toggleRoomOutputMuted();
+    setSoundMuted(next);
   }
 
   let statusLabel = "Voice off";
-  if (connecting) statusLabel = "Connecting / reconnecting…";
+  if (connecting) statusLabel = "Connecting…";
+  else if (connected && soundMuted) statusLabel = "Sound muted — tap Unmute";
   else if (connected && canPublish && hostMuted)
     statusLabel = "Host muted your mic — you can still hear the room";
   else if (connected && canPublish && micOn)
-    statusLabel = "MIC ON (black Mute) — talk; she needs Replay if silent";
+    statusLabel = "Live — your mic is on";
   else if (connected && canPublish && !micOn)
-    statusLabel = "MIC OFF (amber Unmute) — she cannot hear you";
+    statusLabel = "Mic off — tap Unmute mic to talk";
   else if (connected && !canPublish)
     statusLabel =
       remoteAudioCount > 0
-        ? `Listening — ${remoteAudioCount} live mic(s) (tap Replay if silent)`
-        : "Listening — waiting for host mic";
+        ? `Listening — ${remoteAudioCount} live mic(s)`
+        : "Listening — waiting for host";
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
-            Live voice
+            Live sound
           </p>
           <p className="mt-0.5 text-sm font-medium text-zinc-900 dark:text-zinc-50">
             {statusLabel}
           </p>
-          <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-400">
-            Mute should flip to <strong>amber Unmute</strong>. If it stays black,
-            reload with ?v=7 after deploy.
-          </p>
+          {!canPublish && (
+            <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-400">
+              Host voice and soundboard play automatically.
+            </p>
+          )}
         </div>
-        {canPublish && !hostMuted && (
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void toggleMute()}
-              disabled={!connected}
-              className={`min-h-11 min-w-[5.5rem] rounded-xl px-4 py-3 text-sm font-semibold disabled:opacity-50 ${
-                micOn
-                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  : "bg-amber-500 text-white"
-              }`}
-            >
-              {micOn ? "Mute" : "Unmute"}
-            </button>
-            <button
-              type="button"
-              onClick={() => void forceMicOn()}
-              disabled={!connected}
-              className="min-h-11 rounded-xl bg-violet-600 px-3 py-3 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              Restart mic
-            </button>
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {/* One speaker Mute for everyone */}
+          <button
+            type="button"
+            onClick={toggleSoundMute}
+            className={`min-h-11 min-w-[5.5rem] rounded-xl px-4 py-3 text-sm font-semibold ${
+              soundMuted
+                ? "bg-amber-500 text-white"
+                : "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+            }`}
+          >
+            {soundMuted ? "Unmute" : "Mute"}
+          </button>
+          {canPublish && !hostMuted && (
+            <>
+              <button
+                type="button"
+                onClick={() => void toggleMicMute()}
+                disabled={!connected}
+                className={`min-h-11 min-w-[5.5rem] rounded-xl px-4 py-3 text-sm font-semibold disabled:opacity-50 ${
+                  micOn
+                    ? "border border-zinc-400 bg-white text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+                    : "bg-amber-600 text-white"
+                }`}
+              >
+                {micOn ? "Mute mic" : "Unmute mic"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void forceMicOn()}
+                disabled={!connected}
+                className="min-h-11 rounded-xl bg-violet-600 px-3 py-3 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                Restart mic
+              </button>
+            </>
+          )}
+        </div>
       </div>
-
-      <button
-        type="button"
-        onClick={() => void pokeAudio()}
-        className="min-h-11 w-full rounded-xl border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-900 dark:border-emerald-800 dark:bg-zinc-900 dark:text-emerald-100 sm:w-auto"
-      >
-        {audioHint ? "Tap if you hear nothing" : "Replay room audio"}
-      </button>
 
       {micError && (
         <p className="text-xs text-red-700 dark:text-red-300">{micError}</p>
       )}
       {connected && canPublish && !micOn && !hostMuted && (
         <p className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-medium text-amber-950 dark:bg-amber-950 dark:text-amber-100">
-          Mic is off — others cannot hear you. Tap <strong>Unmute</strong>.
-        </p>
-      )}
-      {connected && canPublish && micOn && remoteAudioCount === 0 && (
-        <p className="rounded-lg bg-sky-100 px-3 py-2 text-xs text-sky-950 dark:bg-sky-950 dark:text-sky-100">
-          Your mic is ON. Listener: Enable live sound + Replay room audio.
+          Mic is off — others cannot hear you. Tap <strong>Unmute mic</strong>.
         </p>
       )}
       {connected && canPublish && hostMuted && (

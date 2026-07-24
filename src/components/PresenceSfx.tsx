@@ -2,11 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import type { PresenceMember } from "@/lib/types";
-import {
-  playJoinClap,
-  playLeaveBoom,
-  unlockPresenceAudio,
-} from "@/lib/presence-sounds";
+import { playJoinClap, playLeaveBoom } from "@/lib/presence-sounds";
+import { isRoomOutputMuted, unlockRoomAudio } from "@/lib/room-audio";
 
 type Props = {
   presence: PresenceMember[];
@@ -37,10 +34,10 @@ export function PresenceSfx({ presence, myName, myRole }: Props) {
   const prevRef = useRef<Map<string, number> | null>(null);
   const myKey = `${myRole}\0${myName}`;
 
-  // Unlock audio after first tap anywhere (phones block autoplay otherwise)
+  // Soft unlock if Join didn't (e.g. host auto-join) — first tap anywhere
   useEffect(() => {
     const unlock = () => {
-      void unlockPresenceAudio();
+      void unlockRoomAudio();
     };
     window.addEventListener("pointerdown", unlock, { once: true });
     window.addEventListener("keydown", unlock, { once: true });
@@ -56,6 +53,11 @@ export function PresenceSfx({ presence, myName, myRole }: Props) {
 
     if (prev === null) {
       // First snapshot after join — baseline, no SFX (you just entered)
+      prevRef.current = next;
+      return;
+    }
+
+    if (isRoomOutputMuted()) {
       prevRef.current = next;
       return;
     }

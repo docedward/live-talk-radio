@@ -9,6 +9,7 @@ import {
   type HostSfxId,
 } from "@/lib/host-sfx";
 import { triggerRoomSfx } from "@/lib/api";
+import { unlockRoomAudio } from "@/lib/room-audio";
 
 type Props = {
   roomId: string;
@@ -25,17 +26,18 @@ export function HostSoundboard({ roomId }: Props) {
   const [last, setLast] = useState<string | null>(null);
 
   useEffect(() => {
-    void unlockHostSfx().then(() => preloadHostSfx());
+    void unlockRoomAudio().then(() => preloadHostSfx());
   }, []);
 
   async function fire(id: HostSfxId, label: string) {
     setError(null);
     setBusy(id);
+    await unlockRoomAudio();
     await unlockHostSfx();
     const heard = await playHostSfx(id); // host hears right away
     if (!heard) {
       setError(
-        "Browser blocked sound — tap “Tap to enable soundboard audio” above, then try again."
+        "Could not play — check the Mute button under Live sound, or try again."
       );
     }
     try {
