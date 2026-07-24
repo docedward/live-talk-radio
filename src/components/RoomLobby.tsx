@@ -82,9 +82,11 @@ export function RoomLobby({ roomId }: Props) {
     };
   }, [snapshot, roomId]);
 
-  // Tell the room we left when the tab closes (enables leave cannon for others)
+  // Tell the room we left when the tab closes (enables leave cannon for others).
+  // Depend only on joined state — not full snapshot (poll would re-fire leave every 2s).
+  const hasJoined = !!snapshot;
   useEffect(() => {
-    if (!snapshot) return;
+    if (!hasJoined) return;
     const onHide = () => {
       leaveRoomBeacon(roomId);
     };
@@ -93,9 +95,10 @@ export function RoomLobby({ roomId }: Props) {
     return () => {
       window.removeEventListener("pagehide", onHide);
       window.removeEventListener("beforeunload", onHide);
+      // Leaving the room page (not every poll)
       leaveRoomBeacon(roomId);
     };
-  }, [snapshot, roomId]);
+  }, [hasJoined, roomId]);
 
   async function join(name: string, hostToken?: string) {
     setError(null);
