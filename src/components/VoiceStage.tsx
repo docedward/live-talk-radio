@@ -237,7 +237,9 @@ export function VoiceStage({
         token={token}
         serverUrl={url}
         connect
-        audio={false}
+        // Auto-capture mic when this session may publish (host / on-air).
+        // Listeners stay subscribe-only (audio={false}).
+        audio={tokenCanPublish}
         video={false}
         options={roomOptions}
         connectOptions={connectOptions}
@@ -504,11 +506,37 @@ function VoiceChrome({
     }
   }, [canPublish, hostMuted, isMicrophoneEnabled, localParticipant]);
 
+  async function forceMicOn() {
+    if (!localParticipant || !canPublish || hostMuted) return;
+    setMicError(null);
+    try {
+      // Hard cycle: off then on forces a new MediaStream track publish
+      await localParticipant.setMicrophoneEnabled(false);
+      await new Promise((r) => setTimeout(r, 150));
+      await localParticipant.setMicrophoneEnabled(true);
+    } catch {
+      setMicError(
+        "Could not start microphone. Check browser site settings → Microphone → Allow, then try Restart mic."
+      );
+    }
+  }
+
   async function toggleMute() {
     if (!localParticipant || !canPublish || hostMuted) return;
     setMicError(null);
     try {
-      await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
+      const next = !isMicrophoneEnabled;
+      await localParticipant.setMicrophoneEnabled(next);
+      // If "unmute" didn't stick, force cycle
+      if (next) {
+        await new Promise((r) => setTimeout(r, 100));
+        const stillOff = ![...localParticipant.audioTrackPublications.values()].some(
+          (pub) => pub.track && !pub.isMuted
+        );
+        if (stillOff) {
+          await forceMicOn();
+        }
+      }
     } catch {
       setMicError("Could not access the microphone.");
     }
@@ -539,14 +567,14 @@ function VoiceChrome({
   else if (connected && canPublish && hostMuted)
     statusLabel = "Host muted your mic — you can still hear the room";
   else if (connected && canPublish && isMicrophoneEnabled)
-    statusLabel = "YOUR MIC IS ON — others should hear you when you talk";
+    statusLabel = "YOUR MIC IS ON — talk now; listener taps Replay if silent";
   else if (connected && canPublish && !isMicrophoneEnabled)
-    statusLabel = "YOUR MIC IS OFF — tap Unmute or others hear silence";
+    statusLabel = "YOUR MIC IS OFF — tap Unmute (amber) or Restart mic";
   else if (connected && !canPublish)
     statusLabel =
       remoteAudioCount > 0
-        ? `Listening — ${remoteAudioCount} live mic(s) in room (tap Replay if silent)`
-        : "Listening — no one else has mic on yet";
+        ? `Listening — ${remoteAudioCount} live mic(s) (tap Replay if silent)`
+        : "Listening — waiting for host mic";
 
   return (
     <div className="flex flex-col gap-2">
@@ -559,23 +587,33 @@ function VoiceChrome({
             {statusLabel}
           </p>
           <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-400">
-            One-way audio is usually: host mic off, or listener needs{" "}
-            <strong>Replay room audio</strong>.
+            Black <strong>Mute</strong> = app thinks mic is on. If others still
+            hear silence, tap <strong>Restart mic</strong>.
           </p>
         </div>
         {canPublish && !hostMuted && (
-          <button
-            type="button"
-            onClick={() => void toggleMute()}
-            disabled={!connected}
-            className={`min-h-11 min-w-[5.5rem] rounded-xl px-4 py-3 text-sm font-semibold disabled:opacity-50 ${
-              isMicrophoneEnabled
-                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                : "bg-amber-500 text-white"
-            }`}
-          >
-            {isMicrophoneEnabled ? "Mute" : "Unmute"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void toggleMute()}
+              disabled={!connected}
+              className={`min-h-11 min-w-[5.5rem] rounded-xl px-4 py-3 text-sm font-semibold disabled:opacity-50 ${
+                isMicrophoneEnabled
+                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                  : "bg-amber-500 text-white"
+              }`}
+            >
+              {isMicrophoneEnabled ? "Mute" : "Unmute"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void forceMicOn()}
+              disabled={!connected}
+              className="min-h-11 rounded-xl bg-violet-600 px-3 py-3 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              Restart mic
+            </button>
+          </div>
         )}
       </div>
 
@@ -593,7 +631,14 @@ function VoiceChrome({
       {connected && canPublish && !isMicrophoneEnabled && !hostMuted && (
         <p className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-medium text-amber-950 dark:bg-amber-950 dark:text-amber-100">
           You can hear others, but they cannot hear you until your mic is on.
-          Tap <strong>Unmute</strong> and allow the microphone.
+          Tap <strong>Unmute</strong> or <strong>Restart mic</strong>.
+        </p>
+      )}
+      {connected && canPublish && isMicrophoneEnabled && remoteAudioCount === 0 && (
+        <p className="rounded-lg bg-sky-100 px-3 py-2 text-xs text-sky-950 dark:bg-sky-950 dark:text-sky-100">
+          Your mic shows ON. Listener must also tap{" "}
+          <strong>Enable live sound</strong> then <strong>Replay room audio</strong>.
+          If mute button seems stuck, tap <strong>Restart mic</strong>, then talk.
         </p>
       )}
       {connected && canPublish && hostMuted && (
