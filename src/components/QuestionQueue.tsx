@@ -13,6 +13,7 @@ import {
   togglePanelMute,
 } from "@/lib/api";
 import { subscribeSpeaking } from "@/lib/speaking-bus";
+import { PlayingCard } from "./PlayingCard";
 
 type Props = {
   roomId: string;
@@ -272,30 +273,39 @@ export function QuestionQueue({
                               : "border-emerald-500 bg-emerald-50 text-emerald-950 shadow-sm dark:border-emerald-400 dark:bg-emerald-950/50 dark:text-emerald-50"
                         }`}
                       >
-                        <span className="block text-sm font-semibold">
-                          {name}
-                          {isSpeaking ? " · speaking" : ""}
-                        </span>
-                        <span className="block text-xs font-medium opacity-80">
-                          {muted
-                            ? "Muted — tap to unmute"
-                            : isSpeaking
-                              ? "Hot mic — tap to mute"
-                              : "Live — tap to mute"}
-                        </span>
-                        {!muted && (
-                          <span
-                            className="mt-1 block h-1 overflow-hidden rounded-full bg-emerald-900/20 dark:bg-black/30"
-                            aria-hidden
-                          >
-                            <span
-                              className="block h-full rounded-full bg-emerald-600 transition-[width] duration-75 dark:bg-emerald-300"
-                              style={{
-                                width: `${Math.min(100, Math.round(level * 140))}%`,
-                              }}
-                            />
+                        <span className="flex items-start gap-2">
+                          <PlayingCard
+                            cardId={r.authorAvatar}
+                            size="sm"
+                            className="mt-0.5 shrink-0"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-semibold">
+                              {name}
+                              {isSpeaking ? " · speaking" : ""}
+                            </span>
+                            <span className="block text-xs font-medium opacity-80">
+                              {muted
+                                ? "Muted — tap to unmute"
+                                : isSpeaking
+                                  ? "Hot mic — tap to mute"
+                                  : "Live — tap to mute"}
+                            </span>
+                            {!muted && (
+                              <span
+                                className="mt-1 block h-1 overflow-hidden rounded-full bg-emerald-900/20 dark:bg-black/30"
+                                aria-hidden
+                              >
+                                <span
+                                  className="block h-full rounded-full bg-emerald-600 transition-[width] duration-75 dark:bg-emerald-300"
+                                  style={{
+                                    width: `${Math.min(100, Math.round(level * 140))}%`,
+                                  }}
+                                />
+                              </span>
+                            )}
                           </span>
-                        )}
+                        </span>
                       </button>
                       <HostBtn
                         label="Remove"
@@ -353,10 +363,13 @@ export function QuestionQueue({
                 key={r.id}
                 className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900 dark:bg-amber-950/40"
               >
-                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                  {r.authorName}
-                  <span className="ml-2 text-xs font-normal text-amber-800 dark:text-amber-300">
-                    wants On Air
+                <p className="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                  <PlayingCard cardId={r.authorAvatar} size="sm" />
+                  <span>
+                    {r.authorName || "Someone"}
+                    <span className="ml-2 text-xs font-normal text-amber-800 dark:text-amber-300">
+                      wants On Air
+                    </span>
                   </span>
                 </p>
                 {r.note ? (
@@ -602,7 +615,8 @@ function QueueGroup({
               className="rounded-xl border border-zinc-200 px-3 py-2 dark:border-zinc-800"
             >
               <p className="text-sm text-zinc-900 dark:text-zinc-50">{q.text}</p>
-              <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="mt-0.5 flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+                <PlayingCard cardId={q.authorAvatar} size="xs" />
                 {q.authorName}
               </p>
               {role === "host" && q.status === "pending" && (

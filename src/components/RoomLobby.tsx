@@ -9,6 +9,7 @@ import {
   joinRoom,
   leaveRoomBeacon,
 } from "@/lib/api";
+import { pickFreeCard, type CardId } from "@/lib/card-avatars";
 import { ChatPanel } from "./ChatPanel";
 import { QuestionQueue } from "./QuestionQueue";
 import { PresencePanel } from "./PresencePanel";
@@ -16,6 +17,8 @@ import { PresenceSfx } from "./PresenceSfx";
 import { HostSoundboard } from "./HostSoundboard";
 import { RoomSfxPlayer } from "./RoomSfxPlayer";
 import { VoiceStage } from "./VoiceStage";
+import { CardAvatarPicker } from "./CardAvatarPicker";
+import { PlayingCard } from "./PlayingCard";
 import { unlockPresenceAudio } from "@/lib/presence-sounds";
 
 type Props = {
@@ -25,6 +28,7 @@ type Props = {
 type HostCreds = {
   hostToken: string;
   displayName: string;
+  avatarId?: string;
 };
 
 function loadHostCreds(roomId: string): HostCreds | null {
@@ -37,6 +41,24 @@ function loadHostCreds(roomId: string): HostCreds | null {
   }
 }
 
+function loadSavedAvatar(): CardId | null {
+  try {
+    const raw = localStorage.getItem("ltr-avatar-id");
+    if (!raw) return null;
+    return (raw as CardId) || null;
+  } catch {
+    return null;
+  }
+}
+
+function saveAvatar(id: string) {
+  try {
+    localStorage.setItem("ltr-avatar-id", id);
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * Join gate + room.
  * Host creds are read only after mount so server HTML matches the first client paint
@@ -44,6 +66,7 @@ function loadHostCreds(roomId: string): HostCreds | null {
  */
 export function RoomLobby({ roomId }: Props) {
   const [displayName, setDisplayName] = useState("");
+  const [avatarId, setAvatarId] = useState<CardId | null>(null);
   const [hostCreds, setHostCreds] = useState<HostCreds | null>(null);
   const [booted, setBooted] = useState(false);
   const [snapshot, setSnapshot] = useState<RoomSnapshot | null>(null);
@@ -59,15 +82,22 @@ export function RoomLobby({ roomId }: Props) {
     if (creds?.displayName) {
       setDisplayName(creds.displayName);
     }
+    const saved =
+      (creds?.avatarId as CardId | undefined) || loadSavedAvatar() || pickFreeCard([]);
+    setAvatarId(saved);
     setBooted(true);
   }, [roomId]);
 
   // Auto-join hosts after boot
   useEffect(() => {
-    if (!booted || !hostCreds || snapshot) return;
-    void join(hostCreds.displayName, hostCreds.hostToken);
+    if (!booted || !hostCreds || snapshot || !avatarId) return;
+    void join(
+      hostCreds.displayName,
+      hostCreds.hostToken,
+      (hostCreds.avatarId as CardId) || avatarId
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [booted, hostCreds]);
+  }, [booted, hostCreds, avatarId]);
 
   useEffect(() => {
     if (!snapshot) return;
@@ -77,8 +107,13 @@ export function RoomLobby({ roomId }: Props) {
       const creds = loadHostCreds(roomId);
       const name =
         (displayName || creds?.displayName || "Guest").trim() || "Guest";
+      const card =
+        avatarId ||
+        (creds?.avatarId as CardId | undefined) ||
+        loadSavedAvatar() ||
+        undefined;
       try {
-        const result = await joinRoom(roomId, name, creds?.hostToken);
+        const result = await joinRoom(roomId, name, creds?.hostToken, card);
         if (cancelled) return;
         setSnapshot(result.snapshot);
         setControlNote(null);
@@ -118,7 +153,7 @@ export function RoomLobby({ roomId }: Props) {
       cancelled = true;
       clearInterval(id);
     };
-  }, [snapshot, roomId, displayName]);
+  }, [snapshot, roomId, displayName, avatarId]);
 
   // Only leave on real tab close — not pagehide (phones fire that when backgrounding).
   const hasJoined = !!snapshot;
@@ -134,7 +169,7 @@ export function RoomLobby({ roomId }: Props) {
     };
   }, [hasJoined, roomId]);
 
-  async function join(name: string, hostToken?: string) {
+  async function join(name: string, hostToken?: string, card?: CardId | null) {
     setError(null);
     setJoining(true);
     void unlockPresenceAudio();
@@ -146,9 +181,27 @@ export function RoomLobby({ roomId }: Props) {
 
     try {
       const safeName = (name || "").trim() || "Guest";
-      const result = await joinRoom(roomId, safeName, hostToken);
+      const cardToUse = card || avatarId || pickFreeCard([]);
+      const result = await joinRoom(
+        roomId,
+        safeName,
+        hostToken,
+        cardToUse || undefined
+      );
       setSnapshot(result.snapshot);
       if (safeName) setDisplayName(safeName);
+      if (cardToUse) {
+        setAvatarId(cardToUse);
+        saveAvatar(cardToUse);
+      }
+      // Reflect server-assigned card if random fallback happened
+      const me = result.snapshot.presence.find(
+        (p) => p.displayName === safeName
+      );
+      if (me?.avatarId) {
+        setAvatarId(me.avatarId as CardId);
+        saveAvatar(me.avatarId);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not join room");
     } finally {
@@ -242,6 +295,16 @@ export function RoomLobby({ roomId }: Props) {
             </span>
           </label>
 
+          <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/50">
+            <CardAvatarPicker
+              value={avatarId}
+              onChange={(id) => {
+                setAvatarId(id);
+                saveAvatar(id);
+              }}
+            />
+          </div>
+
           {error && (
             <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
               {error}
@@ -252,7 +315,11 @@ export function RoomLobby({ roomId }: Props) {
             type="button"
             disabled={!canTapEnter}
             onClick={() =>
-              void join(displayName.trim() || "Guest", hostCreds?.hostToken)
+              void join(
+                displayName.trim() || "Guest",
+                hostCreds?.hostToken,
+                avatarId
+              )
             }
             className="mt-4 min-h-12 w-full rounded-xl bg-violet-600 px-4 py-3 text-base font-semibold text-white hover:bg-violet-500 active:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -303,9 +370,12 @@ export function RoomLobby({ roomId }: Props) {
             <h1 className="truncate text-base font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-xl">
               {snapshot.room.name}
             </h1>
-            <p className="truncate text-xs text-zinc-600 dark:text-zinc-400">
-              {isHost ? "Host" : "Listener"}
-              {displayName ? ` · ${displayName}` : ""}
+            <p className="flex items-center gap-1.5 truncate text-xs text-zinc-600 dark:text-zinc-400">
+              {avatarId && <PlayingCard cardId={avatarId} size="xs" />}
+              <span className="truncate">
+                {isHost ? "Host" : "Listener"}
+                {displayName ? ` · ${displayName}` : ""}
+              </span>
             </p>
           </div>
           <button

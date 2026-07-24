@@ -11,6 +11,8 @@ export interface ChatMessage {
   id: string;
   roomId: string;
   authorName: string;
+  /** Playing-card avatar id, e.g. "AS", "7H". */
+  authorAvatar?: string | null;
   text: string;
   createdAt: number;
 }
@@ -19,6 +21,7 @@ export interface Question {
   id: string;
   roomId: string;
   authorName: string;
+  authorAvatar?: string | null;
   text: string;
   status: QuestionStatus;
   createdAt: number;
@@ -28,6 +31,8 @@ export interface OnAirRequest {
   id: string;
   roomId: string;
   authorName: string;
+  /** Playing-card avatar id, e.g. "AS", "7H". */
+  authorAvatar?: string | null;
   /** Optional note from the listener (topic, why, etc.) */
   note: string;
   status: OnAirStatus;
@@ -60,6 +65,8 @@ export interface VoiceInfo {
 export interface PresenceMember {
   displayName: string;
   role: Role;
+  /** Playing-card avatar id, e.g. "AS", "7H". */
+  avatarId?: string | null;
 }
 
 /** Host soundboard cue broadcast to the room. */

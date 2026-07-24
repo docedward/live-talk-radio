@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createRoom } from "@/lib/api";
+import { pickFreeCard, type CardId } from "@/lib/card-avatars";
+import { CardAvatarPicker } from "./CardAvatarPicker";
 
 /**
  * Host form: name the room, create it via HTTP, open the room.
@@ -11,8 +13,18 @@ export function CreateRoomForm() {
   const router = useRouter();
   const [roomName, setRoomName] = useState("");
   const [hostName, setHostName] = useState("");
+  const [avatarId, setAvatarId] = useState<CardId | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("ltr-avatar-id") as CardId | null;
+      setAvatarId(saved || pickFreeCard([]));
+    } catch {
+      setAvatarId(pickFreeCard([]));
+    }
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -20,14 +32,25 @@ export function CreateRoomForm() {
     setBusy(true);
 
     try {
-      const result = await createRoom(roomName, hostName || "Host");
+      const card = avatarId || pickFreeCard([]);
+      const result = await createRoom(
+        roomName,
+        hostName || "Host",
+        card
+      );
       localStorage.setItem(
         `ltr-host-${result.roomId}`,
         JSON.stringify({
           hostToken: result.hostToken,
           displayName: hostName.trim() || "Host",
+          avatarId: card,
         })
       );
+      try {
+        localStorage.setItem("ltr-avatar-id", card);
+      } catch {
+        /* ignore */
+      }
       router.push(`/room/${result.roomId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -76,6 +99,20 @@ export function CreateRoomForm() {
           maxLength={80}
         />
       </label>
+
+      <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/50">
+        <CardAvatarPicker
+          value={avatarId}
+          onChange={(id) => {
+            setAvatarId(id);
+            try {
+              localStorage.setItem("ltr-avatar-id", id);
+            } catch {
+              /* ignore */
+            }
+          }}
+        />
+      </div>
 
       {error && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">

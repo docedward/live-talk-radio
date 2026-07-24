@@ -245,10 +245,70 @@ function countListeners(state) {
   return n;
 }
 
+/** Playing-card avatars: "AS", "7H", "10D", "KC", etc. */
+const CARD_RANKS = new Set([
+  "A",
+  "2",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8",
+  "9",
+  "10",
+  "J",
+  "Q",
+  "K",
+]);
+const CARD_SUITS = ["S", "H", "D", "C"];
+const FULL_DECK = CARD_SUITS.flatMap((s) =>
+  ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"].map(
+    (r) => `${r}${s}`
+  )
+);
+const CARD_RE = /^(A|10|[2-9JQK])([SHDC])$/i;
+
+function normalizeCardId(raw) {
+  if (raw == null || raw === "") return null;
+  const m = String(raw).trim().toUpperCase().match(CARD_RE);
+  if (!m) return null;
+  if (!CARD_RANKS.has(m[1])) return null;
+  return `${m[1]}${m[2]}`;
+}
+
+function takenAvatars(state, exceptMemberId) {
+  const taken = new Set();
+  for (const [id, m] of state.members.entries()) {
+    if (exceptMemberId && id === exceptMemberId) continue;
+    const a = normalizeCardId(m.avatarId);
+    if (a) taken.add(a);
+  }
+  return taken;
+}
+
+function resolveAvatarId(state, memberId, requested) {
+  const taken = takenAvatars(state, memberId);
+  const want = normalizeCardId(requested);
+  if (want && !taken.has(want)) return want;
+  // Keep existing card on rejoin if still free / owned
+  const existing = normalizeCardId(state.members.get(memberId)?.avatarId);
+  if (existing && (!taken.has(existing) || want === existing)) return existing;
+  if (want && taken.has(want)) {
+    throw new Error(
+      `That card is already taken — pick another (e.g. Ace of Spades, 7 of Hearts).`
+    );
+  }
+  const free = FULL_DECK.filter((c) => !taken.has(c));
+  const pool = free.length > 0 ? free : FULL_DECK;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 function presenceList(state) {
   return Array.from(state.members.values()).map((m) => ({
     displayName: m.displayName,
     role: m.role,
+    avatarId: m.avatarId || null,
   }));
 }
 
@@ -304,7 +364,7 @@ function triggerSfx(roomId, hostMemberId, sound) {
   return state.lastSfx;
 }
 
-function joinRoom(roomId, memberId, displayName, hostToken) {
+function joinRoom(roomId, memberId, displayName, hostToken, avatarId) {
   const state = rooms.get(roomId);
   if (!state) throw new Error("Room not found");
 
@@ -318,11 +378,23 @@ function joinRoom(roomId, memberId, displayName, hostToken) {
     }
   }
 
+  const card = resolveAvatarId(state, memberId, avatarId);
+
   state.members.set(memberId, {
     displayName: name,
     role,
+    avatarId: card,
     lastSeen: Date.now(),
   });
+
+  // Keep panel / queue / chat author avatars in sync on rejoin rename
+  for (const r of state.onAirRequests) {
+    if (r.memberId === memberId) {
+      r.authorName = name;
+      r.authorAvatar = card;
+    }
+  }
+
   return { state, role };
 }
 
@@ -431,6 +503,7 @@ function addChat(roomId, memberId, text) {
     id: randomUUID(),
     roomId,
     authorName: member.displayName,
+    authorAvatar: member.avatarId || null,
     text: cleaned,
     createdAt: Date.now(),
   };
@@ -448,6 +521,7 @@ function addQuestion(roomId, memberId, text) {
     id: randomUUID(),
     roomId,
     authorName: member.displayName,
+    authorAvatar: member.avatarId || null,
     text: cleaned,
     status: "pending",
     createdAt: Date.now(),
@@ -484,6 +558,7 @@ function addOnAirRequest(roomId, memberId, note) {
     roomId,
     memberId,
     authorName: member.displayName,
+    authorAvatar: member.avatarId || null,
     note: String(note || "").trim().slice(0, 200),
     status: "pending",
     createdAt: Date.now(),
@@ -665,6 +740,7 @@ function publicRequest(r, viewerMemberId, { hideName = false } = {}) {
     id: r.id,
     roomId: r.roomId,
     authorName: hideName && !isMe ? "" : r.authorName,
+    authorAvatar: hideName && !isMe ? null : r.authorAvatar || null,
     note: hideName && !isMe ? "" : r.note,
     status: r.status,
     createdAt: r.createdAt,
@@ -768,7 +844,8 @@ async function handleApi(req, res, pathname, query, bodyPromise) {
         roomId,
         memberId,
         body.displayName,
-        body.hostToken
+        body.hostToken,
+        body.avatarId
       );
       sendJson(res, 200, {
         ok: true,

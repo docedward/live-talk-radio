@@ -69,23 +69,24 @@ export function fetchRooms() {
   return api<PublicRoom[]>("/api/rooms");
 }
 
-export function createRoom(name: string, hostName: string) {
+export function createRoom(name: string, hostName: string, avatarId?: string) {
   return api<{ ok: true; roomId: string; hostToken: string }>("/api/rooms", {
     method: "POST",
-    body: JSON.stringify({ name, hostName }),
+    body: JSON.stringify({ name, hostName, avatarId }),
   });
 }
 
 export function joinRoom(
   roomId: string,
   displayName: string,
-  hostToken?: string
+  hostToken?: string,
+  avatarId?: string
 ) {
   return api<{ ok: true; snapshot: RoomSnapshot }>(
     `/api/rooms/${encodeURIComponent(roomId)}/join`,
     {
       method: "POST",
-      body: JSON.stringify({ displayName, hostToken }),
+      body: JSON.stringify({ displayName, hostToken, avatarId }),
     }
   );
 }

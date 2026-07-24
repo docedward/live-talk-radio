@@ -1,6 +1,7 @@
 "use client";
 
 import type { PresenceMember } from "@/lib/types";
+import { PlayingCard } from "./PlayingCard";
 
 type Props = {
   presence: PresenceMember[];
@@ -8,7 +9,7 @@ type Props = {
 };
 
 /**
- * Who is in the room right now — easy for joiners to scan.
+ * Who is in the room right now — card face + name.
  */
 export function PresencePanel({ presence, listenerCount }: Props) {
   const hosts = presence.filter((p) => p.role === "host");
@@ -34,19 +35,23 @@ export function PresencePanel({ presence, listenerCount }: Props) {
         <ul className="mt-3 flex flex-wrap gap-2">
           {hosts.map((p, i) => (
             <li
-              key={`host-${p.displayName}-${i}`}
-              className="rounded-full bg-violet-100 px-3 py-1 text-sm font-medium text-violet-900 dark:bg-violet-950 dark:text-violet-200"
+              key={`host-${p.displayName}-${p.avatarId || i}`}
+              className="inline-flex items-center gap-2 rounded-full bg-violet-100 py-1 pl-1 pr-3 text-sm font-medium text-violet-900 dark:bg-violet-950 dark:text-violet-200"
             >
-              {p.displayName}
-              <span className="ml-1 text-xs font-normal opacity-80">host</span>
+              <PlayingCard cardId={p.avatarId} size="xs" />
+              <span>
+                {p.displayName}
+                <span className="ml-1 text-xs font-normal opacity-80">host</span>
+              </span>
             </li>
           ))}
           {listeners.map((p, i) => (
             <li
-              key={`listener-${p.displayName}-${i}`}
-              className="rounded-full bg-zinc-100 px-3 py-1 text-sm text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100"
+              key={`listener-${p.displayName}-${p.avatarId || i}`}
+              className="inline-flex items-center gap-2 rounded-full bg-zinc-100 py-1 pl-1 pr-3 text-sm text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100"
             >
-              {p.displayName}
+              <PlayingCard cardId={p.avatarId} size="xs" />
+              <span>{p.displayName}</span>
             </li>
           ))}
         </ul>

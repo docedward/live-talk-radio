@@ -22,7 +22,10 @@ interface RoomState {
   messages: ChatMessage[];
   questions: Question[];
   onAirRequests: (OnAirRequest & { memberId: string })[];
-  members: Map<string, { displayName: string; role: Role }>;
+  members: Map<
+    string,
+    { displayName: string; role: Role; avatarId?: string | null }
+  >;
   lastSfx: RoomSfxEvent | null;
 }
 
@@ -82,7 +85,8 @@ export function joinRoom(
   roomId: string,
   memberId: string,
   displayName: string,
-  hostToken?: string
+  hostToken?: string,
+  avatarId?: string | null
 ): { state: RoomState; role: Role } {
   const state = rooms.get(roomId);
   if (!state) throw new Error("Room not found");
@@ -91,7 +95,11 @@ export function joinRoom(
   const role: Role =
     hostToken && hostToken === state.room.hostToken ? "host" : "listener";
 
-  state.members.set(memberId, { displayName: name, role });
+  state.members.set(memberId, {
+    displayName: name,
+    role,
+    avatarId: avatarId || null,
+  });
   return { state, role };
 }
 
@@ -130,6 +138,7 @@ export function buildSnapshot(roomId: string, role: Role): RoomSnapshot {
     presence: Array.from(state.members.values()).map((m) => ({
       displayName: m.displayName,
       role: m.role,
+      avatarId: m.avatarId || null,
     })),
     listenerCount: countListeners(state),
     lastSfx: null,
@@ -143,6 +152,7 @@ function publicOnAir(
     id: r.id,
     roomId: r.roomId,
     authorName: r.authorName,
+    authorAvatar: r.authorAvatar || null,
     note: r.note,
     status: r.status,
     createdAt: r.createdAt,
@@ -166,6 +176,7 @@ export function addChatMessage(
     id: randomUUID(),
     roomId,
     authorName: member.displayName,
+    authorAvatar: member.avatarId || null,
     text: cleaned,
     createdAt: Date.now(),
   };

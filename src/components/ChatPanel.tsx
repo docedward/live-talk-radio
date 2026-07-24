@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage } from "@/lib/types";
 import { fetchSnapshot, sendChat } from "@/lib/api";
+import { PlayingCard } from "./PlayingCard";
 
 type Props = {
   roomId: string;
@@ -204,14 +205,24 @@ export function ChatPanel({ roomId, initialMessages }: Props) {
           </p>
         ) : (
           messages.map((m) => (
-            <div key={m.id} className="text-sm leading-relaxed">
-              <span className="font-semibold text-violet-700 dark:text-violet-300">
-                {m.authorName}
-              </span>
-              <span className="break-words text-zinc-700 dark:text-zinc-300">
-                {" "}
-                {m.text}
-              </span>
+            <div
+              key={m.id}
+              className="flex items-start gap-1.5 text-sm leading-relaxed"
+            >
+              <PlayingCard
+                cardId={m.authorAvatar}
+                size="xs"
+                className="mt-0.5 shrink-0"
+              />
+              <div className="min-w-0">
+                <span className="font-semibold text-violet-700 dark:text-violet-300">
+                  {m.authorName}
+                </span>
+                <span className="break-words text-zinc-700 dark:text-zinc-300">
+                  {" "}
+                  {m.text}
+                </span>
+              </div>
             </div>
           ))
         )}
