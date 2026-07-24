@@ -74,6 +74,8 @@ export function RoomLobby({ roomId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
   const [controlNote, setControlNote] = useState<string | null>(null);
+  /** Always-visible share URL in sticky bar (host doesn't scroll for it). */
+  const [roomLink, setRoomLink] = useState<string | null>(null);
 
   // Client-only boot: localStorage is never read during SSR
   useEffect(() => {
@@ -169,6 +171,28 @@ export function RoomLobby({ roomId }: Props) {
     };
   }, [hasJoined, roomId]);
 
+  // Keep guest/host share link in the sticky bar (refresh if tunnel base changes).
+  useEffect(() => {
+    if (!snapshot) return;
+    let cancelled = false;
+    async function loadLink() {
+      try {
+        const url = await getShareableRoomUrl();
+        if (!cancelled) setRoomLink(url);
+      } catch {
+        if (!cancelled && typeof window !== "undefined") {
+          setRoomLink(window.location.href);
+        }
+      }
+    }
+    void loadLink();
+    const id = setInterval(loadLink, 12_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [snapshot, roomId]);
+
   async function join(name: string, hostToken?: string, card?: CardId | null) {
     setError(null);
     setJoining(true);
@@ -210,11 +234,32 @@ export function RoomLobby({ roomId }: Props) {
     }
   }
 
+  async function resolveRoomLink(): Promise<string> {
+    const url = await getShareableRoomUrl();
+    setRoomLink(url);
+    return url;
+  }
+
+  async function copyRoomLink() {
+    const url = roomLink || (await resolveRoomLink());
+    const isPublic = url.startsWith("https://") && !/localhost|127\.0\.0\.1/.test(url);
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareNote(
+        isPublic
+          ? "Link copied — send to guests."
+          : "Copied localhost only — remote guests need https:// (tunnel)."
+      );
+    } catch {
+      setShareNote(url);
+    }
+  }
+
   async function shareOrCopyLink() {
     const title = snapshot?.room.name || "Live Talk Radio";
     // Remote guests cannot open localhost — use public HTTPS tunnel when available
-    const url = await getShareableRoomUrl();
-    const isPublic = url.startsWith("https://");
+    const url = await resolveRoomLink();
+    const isPublic = url.startsWith("https://") && !/localhost|127\.0\.0\.1/.test(url);
 
     if (
       typeof navigator !== "undefined" &&
@@ -237,16 +282,7 @@ export function RoomLobby({ roomId }: Props) {
       }
     }
 
-    try {
-      await navigator.clipboard.writeText(url);
-      setShareNote(
-        isPublic
-          ? "Public link copied — send this to remote listeners."
-          : "Copied localhost only — remote people cannot open this. Tunnel may be down."
-      );
-    } catch {
-      setShareNote(url);
-    }
+    await copyRoomLink();
   }
 
   // Same join UI on server + first client paint (empty name until boot finishes)
@@ -363,7 +399,7 @@ export function RoomLobby({ roomId }: Props) {
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 pb-10 pt-0 sm:pt-6">
-      {/* Sticky bar: always on screen on phones — share is not buried at top-right after scroll */}
+      {/* Sticky bar: room link always visible — no scroll to share */}
       <div className="radio-sticky sticky top-0 z-40 -mx-4 border-b border-[#d4c4a8] bg-[#faf6ee]/95 px-4 py-3 backdrop-blur-md">
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
@@ -387,13 +423,34 @@ export function RoomLobby({ roomId }: Props) {
           <button
             type="button"
             onClick={() => void shareOrCopyLink()}
-            className="min-h-12 shrink-0 rounded-xl bg-[#9a3f1c] px-4 py-3 text-sm font-semibold text-[#fff8f0] shadow-sm hover:bg-[#b34d24] active:bg-[#7a3216]"
+            className="min-h-11 shrink-0 rounded-xl bg-[#9a3f1c] px-3 py-2.5 text-sm font-semibold text-[#fff8f0] shadow-sm hover:bg-[#b34d24] active:bg-[#7a3216] sm:px-4"
           >
-            Share link
+            Share
+          </button>
+        </div>
+
+        <div className="mt-2 flex items-stretch gap-1.5">
+          <label className="sr-only" htmlFor="room-host-link">
+            Guest join link
+          </label>
+          <input
+            id="room-host-link"
+            readOnly
+            value={roomLink || "Loading link…"}
+            onFocus={(e) => e.currentTarget.select()}
+            onClick={(e) => e.currentTarget.select()}
+            className="radio-lcd min-w-0 flex-1 rounded-lg border border-[#d4c4a8] bg-[#fffdf8] px-2.5 py-2 text-[0.7rem] leading-snug tracking-wide text-[#1c1410] outline-none ring-[#c47a10] focus:ring-2 sm:text-xs"
+          />
+          <button
+            type="button"
+            onClick={() => void copyRoomLink()}
+            className="shrink-0 rounded-lg border border-[#d4c4a8] bg-[#f3e0c8] px-3 py-2 text-xs font-semibold text-[#5c2814] hover:bg-[#e8d0b0] active:bg-[#dcc09a]"
+          >
+            Copy
           </button>
         </div>
         {shareNote && (
-          <p className="mt-2 break-all text-xs text-emerald-700 dark:text-emerald-300">
+          <p className="mt-1.5 break-all text-xs text-emerald-800">
             {shareNote}
           </p>
         )}
