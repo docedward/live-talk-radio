@@ -51,6 +51,22 @@ export interface PresenceMember {
   role: Role;
 }
 
+/** Host soundboard cue broadcast to the room. */
+export type RoomSfxId =
+  | "cry"
+  | "drumroll"
+  | "pew"
+  | "laugh"
+  | "applause"
+  | "ohh";
+
+export interface RoomSfxEvent {
+  id: string;
+  sound: RoomSfxId;
+  at: number;
+  byName: string;
+}
+
 export interface Room {
   id: string;
   name: string;
@@ -82,4 +98,6 @@ export interface RoomSnapshot {
   listenerCount: number;
   /** Voice / LiveKit gate for this session (absent if older server). */
   voice?: VoiceInfo;
+  /** Latest host soundboard hit (everyone should play once). */
+  lastSfx?: RoomSfxEvent | null;
 }

@@ -163,6 +163,17 @@ export function removeFromPanel(roomId: string, requestId: string) {
   return moderateOnAir(roomId, requestId, "remove");
 }
 
+/** Host: fire a soundboard effect for the whole room. */
+export function triggerRoomSfx(roomId: string, sound: string) {
+  return api<{ ok: true; lastSfx: { id: string; sound: string; at: number } }>(
+    `/api/rooms/${encodeURIComponent(roomId)}/sfx`,
+    {
+      method: "POST",
+      body: JSON.stringify({ sound }),
+    }
+  );
+}
+
 /** Leave room (also used via sendBeacon on tab close). */
 export function leaveRoom(roomId: string) {
   return api<{ ok: true }>(

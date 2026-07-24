@@ -70,6 +70,7 @@ export function createRoom(name: string): Room {
     questions: [],
     onAirRequests: [],
     members: new Map(),
+    lastSfx: null,
   });
 
   return room;
@@ -129,6 +130,7 @@ export function buildSnapshot(roomId: string, role: Role): RoomSnapshot {
       role: m.role,
     })),
     listenerCount: countListeners(state),
+    lastSfx: null,
   };
 }
 

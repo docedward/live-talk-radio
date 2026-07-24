@@ -169,9 +169,34 @@ function createRoom(name) {
     questions: [],
     onAirRequests: [],
     members: new Map(),
+    lastSfx: null,
   });
 
   return room;
+}
+
+const HOST_SFX_IDS = new Set([
+  "cry",
+  "drumroll",
+  "pew",
+  "laugh",
+  "applause",
+  "ohh",
+]);
+
+function triggerSfx(roomId, hostMemberId, sound) {
+  const { state, member } = requireHostMember(roomId, hostMemberId);
+  const id = String(sound || "").trim();
+  if (!HOST_SFX_IDS.has(id)) {
+    throw new Error("Unknown sound");
+  }
+  state.lastSfx = {
+    id: randomUUID(),
+    sound: id,
+    at: Date.now(),
+    byName: member.displayName,
+  };
+  return state.lastSfx;
 }
 
 function joinRoom(roomId, memberId, displayName, hostToken) {
@@ -281,6 +306,7 @@ function buildSnapshot(roomId, role) {
     panelCap: MAX_PANEL_GUESTS,
     presence: presenceList(state),
     listenerCount: countListeners(state),
+    lastSfx: state.lastSfx || null,
   };
 }
 
@@ -540,6 +566,17 @@ async function handleApi(req, res, pathname, query) {
         ok: true,
         snapshot: publicSnapshot(roomId, member.role, memberId),
       });
+      return true;
+    }
+
+    // POST /api/rooms/:id/sfx — host soundboard
+    const sfxMatch = pathname.match(/^\/api\/rooms\/([^/]+)\/sfx$/);
+    if (sfxMatch && req.method === "POST") {
+      const roomId = decodeURIComponent(sfxMatch[1]);
+      const body = await readBody(req);
+      const memberId = sessionIdFrom(req, body, query);
+      const lastSfx = triggerSfx(roomId, memberId, body.sound);
+      sendJson(res, 200, { ok: true, lastSfx });
       return true;
     }
 

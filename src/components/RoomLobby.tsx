@@ -8,6 +8,8 @@ import { ChatPanel } from "./ChatPanel";
 import { QuestionQueue } from "./QuestionQueue";
 import { PresencePanel } from "./PresencePanel";
 import { PresenceSfx } from "./PresenceSfx";
+import { HostSoundboard } from "./HostSoundboard";
+import { RoomSfxPlayer } from "./RoomSfxPlayer";
 import { VoiceStage } from "./VoiceStage";
 import { unlockPresenceAudio } from "@/lib/presence-sounds";
 
@@ -286,6 +288,14 @@ export function RoomLobby({ roomId }: Props) {
           guests + you). Remove one or clear the whole panel anytime.
         </div>
       )}
+
+      {isHost && <HostSoundboard roomId={roomId} />}
+
+      <RoomSfxPlayer
+        roomId={roomId}
+        lastSfx={snapshot.lastSfx}
+        isHost={isHost}
+      />
 
       {iAmLive && (
         <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-100">
