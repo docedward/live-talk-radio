@@ -14,12 +14,13 @@ import type {
   RoomSnapshot,
 } from "./types";
 
+const MAX_PANEL_GUESTS = 5;
+
 interface RoomState {
   room: Room;
   messages: ChatMessage[];
   questions: Question[];
   onAirRequests: (OnAirRequest & { memberId: string })[];
-  liveOnAirId: string | null;
   members: Map<string, { displayName: string; role: Role }>;
 }
 
@@ -68,7 +69,6 @@ export function createRoom(name: string): Room {
     messages: [],
     questions: [],
     onAirRequests: [],
-    liveOnAirId: null,
     members: new Map(),
   });
 
@@ -96,8 +96,8 @@ export function buildSnapshot(roomId: string, role: Role): RoomSnapshot {
   const state = rooms.get(roomId);
   if (!state) throw new Error("Room not found");
 
-  const live =
-    state.onAirRequests.find((r) => r.id === state.liveOnAirId) ?? null;
+  const livePanelRaw = state.onAirRequests.filter((r) => r.status === "live");
+  const livePanel = livePanelRaw.map(publicOnAir);
 
   const questions =
     role === "host"
@@ -121,7 +121,9 @@ export function buildSnapshot(roomId: string, role: Role): RoomSnapshot {
     messages: [...state.messages],
     questions,
     onAirRequests,
-    liveOnAir: live ? publicOnAir(live) : null,
+    liveOnAir: livePanel[0] ?? null,
+    livePanel,
+    panelCap: MAX_PANEL_GUESTS,
     presence: Array.from(state.members.values()).map((m) => ({
       displayName: m.displayName,
       role: m.role,

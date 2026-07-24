@@ -138,11 +138,11 @@ export function requestOnAir(roomId: string, note = "") {
   );
 }
 
-/** Host: go-live (approve) or reject an on-air request. */
+/** Host: add to panel (live), reject request, or remove from panel. */
 export function moderateOnAir(
   roomId: string,
   requestId: string,
-  action: "live" | "reject"
+  action: "live" | "reject" | "remove"
 ) {
   return api<{ ok: true; request?: OnAirRequest }>(
     `/api/rooms/${encodeURIComponent(roomId)}/on-air/${encodeURIComponent(requestId)}/${action}`,
@@ -150,11 +150,17 @@ export function moderateOnAir(
   );
 }
 
+/** Host: clear entire guest panel. */
 export function clearOnAir(roomId: string) {
   return api<{ ok: true }>(
     `/api/rooms/${encodeURIComponent(roomId)}/on-air/clear`,
     { method: "POST", body: JSON.stringify({}) }
   );
+}
+
+/** Host: remove one guest from the panel. */
+export function removeFromPanel(roomId: string, requestId: string) {
+  return moderateOnAir(roomId, requestId, "remove");
 }
 
 /** Mint a LiveKit access token for the current session (publish rights from server). */

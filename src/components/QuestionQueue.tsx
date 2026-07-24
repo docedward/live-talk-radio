@@ -7,6 +7,7 @@ import {
   fetchSnapshot,
   moderateOnAir,
   moderateQuestion,
+  removeFromPanel,
   requestOnAir,
   submitQuestion,
 } from "@/lib/api";
@@ -16,30 +17,32 @@ type Props = {
   role: Role;
   initialQuestions: Question[];
   initialOnAirRequests: OnAirRequest[];
-  initialLiveOnAir: OnAirRequest | null;
+  initialLivePanel: OnAirRequest[];
+  panelCap: number;
 };
 
 type ListenerMode = "question" | "onair";
 
 /**
- * Questions + On Air requests.
- * Listeners choose: ask a question OR request to go On Air.
- * Host moderates both; only On Air requests become the live banner.
+ * Questions + On Air panel.
+ * Host can put multiple guests On Air (up to panelCap).
  */
 export function QuestionQueue({
   roomId,
   role,
   initialQuestions,
   initialOnAirRequests,
-  initialLiveOnAir,
+  initialLivePanel,
+  panelCap,
 }: Props) {
   const [questions, setQuestions] = useState<Question[]>(initialQuestions);
   const [onAirRequests, setOnAirRequests] = useState<OnAirRequest[]>(
     initialOnAirRequests
   );
-  const [liveOnAir, setLiveOnAir] = useState<OnAirRequest | null>(
-    initialLiveOnAir
+  const [livePanel, setLivePanel] = useState<OnAirRequest[]>(
+    initialLivePanel
   );
+  const [cap, setCap] = useState(panelCap);
   const [mode, setMode] = useState<ListenerMode>("question");
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -48,8 +51,9 @@ export function QuestionQueue({
   useEffect(() => {
     setQuestions(initialQuestions);
     setOnAirRequests(initialOnAirRequests);
-    setLiveOnAir(initialLiveOnAir);
-  }, [initialQuestions, initialOnAirRequests, initialLiveOnAir]);
+    setLivePanel(initialLivePanel);
+    setCap(panelCap);
+  }, [initialQuestions, initialOnAirRequests, initialLivePanel, panelCap]);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,7 +63,11 @@ export function QuestionQueue({
         if (cancelled) return;
         setQuestions(result.snapshot.questions);
         setOnAirRequests(result.snapshot.onAirRequests);
-        setLiveOnAir(result.snapshot.liveOnAir);
+        setLivePanel(
+          result.snapshot.livePanel ??
+            (result.snapshot.liveOnAir ? [result.snapshot.liveOnAir] : [])
+        );
+        if (result.snapshot.panelCap) setCap(result.snapshot.panelCap);
       } catch {
         /* ignore */
       }
@@ -75,7 +83,11 @@ export function QuestionQueue({
     const result = await fetchSnapshot(roomId);
     setQuestions(result.snapshot.questions);
     setOnAirRequests(result.snapshot.onAirRequests);
-    setLiveOnAir(result.snapshot.liveOnAir);
+    setLivePanel(
+      result.snapshot.livePanel ??
+        (result.snapshot.liveOnAir ? [result.snapshot.liveOnAir] : [])
+    );
+    if (result.snapshot.panelCap) setCap(result.snapshot.panelCap);
   }
 
   async function submit(e: React.FormEvent) {
@@ -128,70 +140,102 @@ export function QuestionQueue({
     }
   }
 
+  async function onRemoveFromPanel(requestId: string) {
+    setError(null);
+    try {
+      await removeFromPanel(roomId, requestId);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove");
+    }
+  }
+
   const pendingQ = questions.filter((q) => q.status === "pending");
   const approvedQ = questions.filter((q) => q.status === "approved");
   const rejectedQ = questions.filter((q) => q.status === "rejected");
   const pendingOnAir = onAirRequests.filter((r) => r.status === "pending");
+  const panelFull = livePanel.length >= cap;
+  const iAmOnPanel = livePanel.some((r) => r.isMe);
 
   return (
     <section className="flex min-h-[320px] flex-1 flex-col rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
       <header className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-          Questions &amp; On Air
+          Questions &amp; speaker panel
         </h2>
         <p className="text-xs text-zinc-500 dark:text-zinc-400">
           {role === "host"
-            ? "Approve questions. For On Air, only grant requests listeners send you."
-            : "Choose: ask a question, or request to go On Air."}
+            ? `Approve questions. Put multiple guests On Air (up to ${cap}).`
+            : "Choose: ask a question, or request to join the speaker panel."}
         </p>
       </header>
 
-      {/* On air banner — only from listener requests the host approved */}
+      {/* Speaker panel — host + multiple live guests */}
       <div className="border-b border-zinc-200 bg-violet-50 px-4 py-3 dark:border-zinc-800 dark:bg-violet-950/40">
-        <p className="text-xs font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">
-          On air now
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">
+            Speaker panel ({livePanel.length}/{cap} guests)
+          </p>
+          {role === "host" && livePanel.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void onClearLive()}
+              className="text-xs font-medium text-violet-700 underline dark:text-violet-300"
+            >
+              Clear whole panel
+            </button>
+          )}
+        </div>
+        <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+          Host is always on. Guests below have live mics when voice is
+          connected.
         </p>
-        {liveOnAir ? (
-          <div className="mt-1">
-            <p className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-              {liveOnAir.authorName}
-              {liveOnAir.isMe ? " (you)" : ""}
-            </p>
-            {liveOnAir.note ? (
-              <p className="mt-0.5 text-sm text-zinc-700 dark:text-zinc-300">
-                {liveOnAir.note}
-              </p>
-            ) : (
-              <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
-                Live with the host — room can hear their mic when voice is on
-              </p>
-            )}
-            {role === "listener" && liveOnAir.isMe && (
-              <p className="mt-2 text-xs font-medium text-violet-800 dark:text-violet-200">
-                Your mic should go live (allow permission if asked). Host can
-                clear you anytime.
-              </p>
-            )}
-            {role === "listener" && !liveOnAir.isMe && (
-              <p className="mt-2 text-xs font-medium text-violet-800 dark:text-violet-200">
-                A guest is On Air — listen via Live voice above. Your mic stays
-                off.
-              </p>
-            )}
-            {role === "host" && (
-              <button
-                type="button"
-                onClick={onClearLive}
-                className="mt-2 text-xs font-medium text-violet-700 underline dark:text-violet-300"
-              >
-                Clear On Air (end guest mic)
-              </button>
-            )}
-          </div>
+        {livePanel.length === 0 ? (
+          <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+            No guests on the panel yet. Listeners request On Air; host adds
+            them (up to {cap}).
+          </p>
         ) : (
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Nobody on air yet. Listeners request it; host approves. Only one
-            guest mic at a time.
+          <ul className="mt-2 flex flex-col gap-2">
+            {livePanel.map((r) => (
+              <li
+                key={r.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-violet-200 bg-white/80 px-3 py-2 dark:border-violet-800 dark:bg-zinc-950/60"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                    {r.authorName}
+                    {r.isMe ? " (you)" : ""}
+                    <span className="ml-2 text-xs font-normal text-emerald-700 dark:text-emerald-300">
+                      live
+                    </span>
+                  </p>
+                  {r.note ? (
+                    <p className="truncate text-xs text-zinc-600 dark:text-zinc-400">
+                      {r.note}
+                    </p>
+                  ) : null}
+                </div>
+                {role === "host" && (
+                  <HostBtn
+                    label="Remove"
+                    tone="danger"
+                    onClick={() => void onRemoveFromPanel(r.id)}
+                  />
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        {iAmOnPanel && (
+          <p className="mt-2 text-xs font-medium text-violet-800 dark:text-violet-200">
+            You are on the panel — allow the mic if asked. Host can remove you
+            anytime.
+          </p>
+        )}
+        {panelFull && role === "host" && (
+          <p className="mt-2 text-xs text-amber-800 dark:text-amber-200">
+            Panel full. Remove someone before adding another guest.
           </p>
         )}
       </div>
@@ -232,9 +276,12 @@ export function QuestionQueue({
                 {role === "host" && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     <HostBtn
-                      label="Put them On Air"
+                      label={panelFull ? "Panel full" : "Add to panel"}
                       tone="primary"
-                      onClick={() => onOnAir("live", r.id)}
+                      onClick={() => {
+                        if (panelFull) return;
+                        void onOnAir("live", r.id);
+                      }}
                     />
                     <HostBtn
                       label="Reject"

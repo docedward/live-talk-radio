@@ -3,7 +3,7 @@
 _Last updated: 2026-07-24_
 
 ## Goal
-Live Talk Radio: moderated text rooms **plus** live 2-person voice (host always; one listener only when host puts them On Air; others hear via LiveKit).
+Live Talk Radio: moderated text rooms **plus** live voice (host always; **speaker panel** of up to 5 guests On Air; others hear via LiveKit).
 
 ## Done
 - Text MVP: rooms, join, chat, question queue, On Air request state machine

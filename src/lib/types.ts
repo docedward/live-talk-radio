@@ -40,7 +40,7 @@ export interface OnAirRequest {
 export interface VoiceInfo {
   /** Server has LiveKit credentials configured. */
   enabled: boolean;
-  /** This session may publish audio (host, or live On Air guest). */
+  /** This session may publish audio (host, or any live panel guest). */
   canPublish: boolean;
   /** LiveKit WebSocket URL (public). */
   url: string;
@@ -69,8 +69,14 @@ export interface RoomSnapshot {
   messages: ChatMessage[];
   questions: Question[];
   onAirRequests: OnAirRequest[];
-  /** Who is currently featured on air (from an approved request). */
+  /**
+   * @deprecated Prefer livePanel. First guest on the panel if any (compat).
+   */
   liveOnAir: OnAirRequest | null;
+  /** All guests currently on the speaker panel (live mics). Host is separate. */
+  livePanel: OnAirRequest[];
+  /** Max simultaneous guest panelists. */
+  panelCap: number;
   /** Everyone currently in the room (host + listeners). */
   presence: PresenceMember[];
   listenerCount: number;

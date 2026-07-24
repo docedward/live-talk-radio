@@ -66,10 +66,15 @@ function livekitRoomName(roomId) {
   return `trl-${roomId}`;
 }
 
+/** Max simultaneous guest mics on the panel (host is separate). */
+const MAX_PANEL_GUESTS = 5;
+
+function livePanelRequests(state) {
+  return state.onAirRequests.filter((r) => r.status === "live");
+}
+
 function isLiveGuest(state, memberId) {
-  if (!state.liveOnAirId) return false;
-  const live = state.onAirRequests.find((r) => r.id === state.liveOnAirId);
-  return !!(live && live.status === "live" && live.memberId === memberId);
+  return livePanelRequests(state).some((r) => r.memberId === memberId);
 }
 
 function memberCanPublish(state, memberId, role) {
@@ -163,7 +168,6 @@ function createRoom(name) {
     messages: [],
     questions: [],
     onAirRequests: [],
-    liveOnAirId: null,
     members: new Map(),
   });
 
@@ -217,8 +221,9 @@ function buildSnapshot(roomId, role) {
   const state = rooms.get(roomId);
   if (!state) throw new Error("Room not found");
 
-  const liveOnAir =
-    state.onAirRequests.find((r) => r.id === state.liveOnAirId) ?? null;
+  const livePanel = livePanelRequests(state);
+  /** @deprecated single-slot field — first panelist if any (compat) */
+  const liveOnAir = livePanel[0] ?? null;
 
   const questions =
     role === "host"
@@ -243,6 +248,8 @@ function buildSnapshot(roomId, role) {
     questions,
     onAirRequests,
     liveOnAir,
+    livePanel,
+    panelCap: MAX_PANEL_GUESTS,
     presence: presenceList(state),
     listenerCount: countListeners(state),
   };
@@ -325,15 +332,19 @@ function setOnAirLive(roomId, hostMemberId, requestId) {
   if (request.status === "rejected" || request.status === "done") {
     throw new Error("That request is no longer available");
   }
-
-  for (const r of state.onAirRequests) {
-    if (r.status === "live" && r.id !== requestId) {
-      r.status = "done";
-    }
+  if (request.status === "live") {
+    return request;
   }
 
+  const panel = livePanelRequests(state);
+  if (panel.length >= MAX_PANEL_GUESTS) {
+    throw new Error(
+      `Panel is full (${MAX_PANEL_GUESTS} guests). Remove someone before adding another.`
+    );
+  }
+
+  // Add to panel — do not demote other live guests
   request.status = "live";
-  state.liveOnAirId = request.id;
   return request;
 }
 
@@ -341,22 +352,30 @@ function rejectOnAir(roomId, hostMemberId, requestId) {
   const { state } = requireHostMember(roomId, hostMemberId);
   const request = state.onAirRequests.find((r) => r.id === requestId);
   if (!request) throw new Error("On Air request not found");
-  if (request.status === "live") {
-    state.liveOnAirId = null;
-  }
   request.status = "rejected";
   return request;
 }
 
+/** Host removes one guest from the panel (mic off for them). */
+function removeFromPanel(roomId, hostMemberId, requestId) {
+  const { state } = requireHostMember(roomId, hostMemberId);
+  const request = state.onAirRequests.find((r) => r.id === requestId);
+  if (!request) throw new Error("On Air request not found");
+  if (request.status !== "live") {
+    throw new Error("That person is not on the panel");
+  }
+  request.status = "done";
+  return request;
+}
+
+/** Host clears entire guest panel. */
 function clearOnAir(roomId, hostMemberId) {
   const { state } = requireHostMember(roomId, hostMemberId);
-  if (state.liveOnAirId) {
-    const current = state.onAirRequests.find((r) => r.id === state.liveOnAirId);
-    if (current && current.status === "live") {
-      current.status = "done";
+  for (const r of state.onAirRequests) {
+    if (r.status === "live") {
+      r.status = "done";
     }
   }
-  state.liveOnAirId = null;
 }
 
 function readBody(req) {
@@ -418,6 +437,8 @@ function publicSnapshot(roomId, role, memberId) {
     liveOnAir: snap.liveOnAir
       ? publicRequest(snap.liveOnAir, memberId)
       : null,
+    livePanel: (snap.livePanel || []).map((r) => publicRequest(r, memberId)),
+    panelCap: snap.panelCap ?? MAX_PANEL_GUESTS,
     voice: voiceInfo(state, memberId, role),
   };
 }
@@ -573,7 +594,7 @@ async function handleApi(req, res, pathname, query) {
       return true;
     }
 
-    // POST /api/rooms/:id/on-air/clear
+    // POST /api/rooms/:id/on-air/clear — clear entire guest panel
     const onAirClear = pathname.match(/^\/api\/rooms\/([^/]+)\/on-air\/clear$/);
     if (onAirClear && req.method === "POST") {
       const roomId = decodeURIComponent(onAirClear[1]);
@@ -584,9 +605,9 @@ async function handleApi(req, res, pathname, query) {
       return true;
     }
 
-    // POST /api/rooms/:id/on-air/:requestId/live|reject
+    // POST /api/rooms/:id/on-air/:requestId/live|reject|remove
     const onAirAction = pathname.match(
-      /^\/api\/rooms\/([^/]+)\/on-air\/([^/]+)\/(live|reject)$/
+      /^\/api\/rooms\/([^/]+)\/on-air\/([^/]+)\/(live|reject|remove)$/
     );
     if (onAirAction && req.method === "POST") {
       const roomId = decodeURIComponent(onAirAction[1]);
@@ -594,10 +615,14 @@ async function handleApi(req, res, pathname, query) {
       const action = onAirAction[3];
       const body = await readBody(req);
       const memberId = sessionIdFrom(req, body);
-      const request =
-        action === "live"
-          ? setOnAirLive(roomId, memberId, requestId)
-          : rejectOnAir(roomId, memberId, requestId);
+      let request;
+      if (action === "live") {
+        request = setOnAirLive(roomId, memberId, requestId);
+      } else if (action === "remove") {
+        request = removeFromPanel(roomId, memberId, requestId);
+      } else {
+        request = rejectOnAir(roomId, memberId, requestId);
+      }
       sendJson(res, 200, {
         ok: true,
         request: publicRequest(request, memberId),

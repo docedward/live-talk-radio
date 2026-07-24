@@ -12,9 +12,9 @@ export default function HomePage() {
           Live Talk Radio
         </h1>
         <p className="max-w-2xl text-base text-zinc-600 dark:text-zinc-400">
-          Create a room, share the link, moderate questions, and put one
-          listener On Air with live voice (host + one guest). Everyone else
-          listens. Chat stays open.
+          Create a room, share the link, moderate questions, and put a{" "}
+          <strong>panel of guests</strong> On Air with live voice (host + up to
+          five guests). Everyone else listens. Chat stays open.
         </p>
       </header>
 
