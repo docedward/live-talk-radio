@@ -409,15 +409,63 @@ function VoiceChrome({
   hostMuted: boolean;
   mobile: boolean;
 }) {
+  const room = useRoomContext();
   const connectionState = useConnectionState();
   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
   const [micError, setMicError] = useState<string | null>(null);
   const [audioHint, setAudioHint] = useState(mobile);
+  const [remoteAudioCount, setRemoteAudioCount] = useState(0);
 
   const connected = connectionState === ConnectionState.Connected;
   const connecting =
     connectionState === ConnectionState.Connecting ||
     connectionState === ConnectionState.Reconnecting;
+
+  // Count remote audio tracks (are we actually receiving anyone?)
+  useEffect(() => {
+    if (!room) return;
+    const recount = () => {
+      let n = 0;
+      room.remoteParticipants.forEach((p) => {
+        p.audioTrackPublications.forEach((pub) => {
+          if (pub.track && !pub.isMuted) n += 1;
+        });
+      });
+      setRemoteAudioCount(n);
+    };
+    recount();
+    room.on(RoomEvent.TrackSubscribed, recount);
+    room.on(RoomEvent.TrackUnsubscribed, recount);
+    room.on(RoomEvent.TrackMuted, recount);
+    room.on(RoomEvent.TrackUnmuted, recount);
+    room.on(RoomEvent.ParticipantConnected, recount);
+    room.on(RoomEvent.ParticipantDisconnected, recount);
+    return () => {
+      room.off(RoomEvent.TrackSubscribed, recount);
+      room.off(RoomEvent.TrackUnsubscribed, recount);
+      room.off(RoomEvent.TrackMuted, recount);
+      room.off(RoomEvent.TrackUnmuted, recount);
+      room.off(RoomEvent.ParticipantConnected, recount);
+      room.off(RoomEvent.ParticipantDisconnected, recount);
+    };
+  }, [room]);
+
+  // When a remote track arrives, try to play all <audio> elements (autoplay policy)
+  useEffect(() => {
+    if (!room) return;
+    const kick = () => {
+      document.querySelectorAll("audio").forEach((el) => {
+        const a = el as HTMLAudioElement;
+        a.muted = false;
+        a.volume = 1;
+        void a.play().catch(() => undefined);
+      });
+    };
+    room.on(RoomEvent.TrackSubscribed, kick);
+    return () => {
+      room.off(RoomEvent.TrackSubscribed, kick);
+    };
+  }, [room]);
 
   useEffect(() => {
     if (!connected || !canPublish || !localParticipant) return;
@@ -468,16 +516,19 @@ function VoiceChrome({
 
   async function pokeAudio() {
     setAudioHint(false);
+    await unlockHostSfx();
     try {
       const els = document.querySelectorAll("audio");
       for (const el of els) {
+        const a = el as HTMLAudioElement;
+        a.muted = false;
+        a.volume = 1;
         try {
-          await (el as HTMLAudioElement).play();
+          await a.play();
         } catch {
           /* ignore */
         }
       }
-      void Room;
     } catch {
       /* ignore */
     }
@@ -488,11 +539,14 @@ function VoiceChrome({
   else if (connected && canPublish && hostMuted)
     statusLabel = "Host muted your mic — you can still hear the room";
   else if (connected && canPublish && isMicrophoneEnabled)
-    statusLabel = "Mic live — stay on this tab";
+    statusLabel = "YOUR MIC IS ON — others should hear you when you talk";
   else if (connected && canPublish && !isMicrophoneEnabled)
-    statusLabel = "Mic muted — you can still hear the room";
+    statusLabel = "YOUR MIC IS OFF — tap Unmute or others hear silence";
   else if (connected && !canPublish)
-    statusLabel = "Listening — keep this tab open";
+    statusLabel =
+      remoteAudioCount > 0
+        ? `Listening — ${remoteAudioCount} live mic(s) in room (tap Replay if silent)`
+        : "Listening — no one else has mic on yet";
 
   return (
     <div className="flex flex-col gap-2">
@@ -505,7 +559,7 @@ function VoiceChrome({
             {statusLabel}
           </p>
           <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-400">
-            Keep this tab open. If audio stops, open the tab and tap{" "}
+            One-way audio is usually: host mic off, or listener needs{" "}
             <strong>Replay room audio</strong>.
           </p>
         </div>
@@ -535,6 +589,12 @@ function VoiceChrome({
 
       {micError && (
         <p className="text-xs text-red-700 dark:text-red-300">{micError}</p>
+      )}
+      {connected && canPublish && !isMicrophoneEnabled && !hostMuted && (
+        <p className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-medium text-amber-950 dark:bg-amber-950 dark:text-amber-100">
+          You can hear others, but they cannot hear you until your mic is on.
+          Tap <strong>Unmute</strong> and allow the microphone.
+        </p>
       )}
       {connected && canPublish && hostMuted && (
         <p className="text-xs text-amber-800 dark:text-amber-200">
