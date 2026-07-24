@@ -1,14 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LiveKitRoom,
   RoomAudioRenderer,
   useLocalParticipant,
   useConnectionState,
+  useRoomContext,
 } from "@livekit/components-react";
-import { ConnectionState, Room } from "livekit-client";
+import { ConnectionState, Room, RoomEvent } from "livekit-client";
 import { fetchVoiceToken } from "@/lib/api";
+import { isHostSfxId, playHostSfx, unlockHostSfx } from "@/lib/host-sfx";
 
 type Props = {
   roomId: string;
@@ -68,11 +70,11 @@ export function VoiceStage({
     }
   }, [roomId]);
 
-  // After user starts, keep token in sync when On Air publish rights flip.
+  // After user starts, keep token in sync when On Air / host-mute flips.
   useEffect(() => {
     if (!enabled || !started) return;
     void refreshToken();
-  }, [enabled, started, canPublish, refreshToken]);
+  }, [enabled, started, canPublish, hostMuted, refreshToken]);
 
   if (!enabled) {
     return (
@@ -162,6 +164,7 @@ export function VoiceStage({
       className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 dark:border-emerald-900 dark:bg-emerald-950/40"
     >
       <RoomAudioRenderer />
+      <LiveKitSfxListener />
       <VoiceChrome
         canPublish={tokenCanPublish}
         hostMuted={hostMuted}
@@ -169,6 +172,51 @@ export function VoiceStage({
       />
     </LiveKitRoom>
   );
+}
+
+/** Soundboard over LiveKit data plane — works if REST/page timed out. */
+function LiveKitSfxListener() {
+  const room = useRoomContext();
+  const seen = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!room) return;
+
+    const onData = (
+      payload: Uint8Array,
+      _participant?: unknown,
+      _kind?: unknown,
+      topic?: string
+    ) => {
+      if (topic && topic !== "trl-sfx") return;
+      try {
+        const msg = JSON.parse(new TextDecoder().decode(payload)) as {
+          type?: string;
+          sound?: string;
+          id?: string;
+        };
+        if (msg.type !== "sfx" || !msg.sound || !isHostSfxId(msg.sound)) return;
+        const sound = msg.sound;
+        if (msg.id && seen.current.has(msg.id)) return;
+        if (msg.id) {
+          seen.current.add(msg.id);
+          if (seen.current.size > 40) {
+            seen.current = new Set([...seen.current].slice(-20));
+          }
+        }
+        void unlockHostSfx().then(() => playHostSfx(sound));
+      } catch {
+        /* ignore bad packets */
+      }
+    };
+
+    room.on(RoomEvent.DataReceived, onData);
+    return () => {
+      room.off(RoomEvent.DataReceived, onData);
+    };
+  }, [room]);
+
+  return null;
 }
 
 function VoiceChrome({

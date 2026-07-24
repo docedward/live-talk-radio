@@ -14,7 +14,11 @@ import { fileURLToPath } from "url";
 import next from "next";
 import { Server } from "socket.io";
 import { randomBytes, randomUUID } from "crypto";
-import { AccessToken } from "livekit-server-sdk";
+import {
+  AccessToken,
+  RoomServiceClient,
+  DataPacket_Kind,
+} from "livekit-server-sdk";
 
 // --- Load .env.local / .env (Node does not auto-load for custom server) ---
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -77,25 +81,84 @@ function isLiveGuest(state, memberId) {
   return livePanelRequests(state).some((r) => r.memberId === memberId);
 }
 
-function memberCanPublish(state, memberId, role) {
-  if (role === "host") return true;
-  return isLiveGuest(state, memberId);
-}
-
 function guestHostMuted(state, memberId) {
   const live = livePanelRequests(state).find((r) => r.memberId === memberId);
   return !!(live && live.hostMuted);
 }
 
+function memberCanPublish(state, memberId, role) {
+  if (role === "host") return true;
+  if (!isLiveGuest(state, memberId)) return false;
+  // Host mute blocks publish even if still on panel
+  return !guestHostMuted(state, memberId);
+}
+
 function voiceInfo(state, memberId, role) {
   const enabled = isVoiceConfigured();
+  const onPanel =
+    role === "host" || isLiveGuest(state, memberId);
+  const hostMuted =
+    role === "listener" && isLiveGuest(state, memberId) && guestHostMuted(state, memberId);
   const canPublish = enabled && memberCanPublish(state, memberId, role);
   return {
     enabled,
     canPublish,
     url: enabled ? getLiveKitUrl() : "",
-    hostMuted: role === "listener" && canPublish && guestHostMuted(state, memberId),
+    hostMuted,
+    onPanel: enabled && onPanel,
   };
+}
+
+function livekitHttpHost() {
+  return getLiveKitUrl()
+    .replace(/^wss:/i, "https:")
+    .replace(/^ws:/i, "http:");
+}
+
+function getRoomService() {
+  const apiKey = process.env.LIVEKIT_API_KEY?.trim();
+  const apiSecret = process.env.LIVEKIT_API_SECRET?.trim();
+  if (!apiKey || !apiSecret || !getLiveKitUrl()) return null;
+  return new RoomServiceClient(livekitHttpHost(), apiKey, apiSecret);
+}
+
+/** Force LiveKit publish rights (host mute still works if their web UI timed out). */
+async function livekitSetCanPublish(roomId, identity, canPublish) {
+  const svc = getRoomService();
+  if (!svc || !identity) return;
+  try {
+    await svc.updateParticipant(livekitRoomName(roomId), identity, {
+      permission: {
+        canPublish: Boolean(canPublish),
+        canSubscribe: true,
+        canPublishData: true,
+      },
+    });
+  } catch (err) {
+    console.warn(
+      "LiveKit updateParticipant:",
+      err instanceof Error ? err.message : err
+    );
+  }
+}
+
+/** Push soundboard to everyone still in LiveKit (even if REST poll died). */
+async function livekitBroadcastSfx(roomId, sound, eventId) {
+  const svc = getRoomService();
+  if (!svc) return;
+  try {
+    const payload = new TextEncoder().encode(
+      JSON.stringify({ type: "sfx", sound, id: eventId })
+    );
+    await svc.sendData(
+      livekitRoomName(roomId),
+      payload,
+      DataPacket_Kind.RELIABLE,
+      { topic: "trl-sfx" }
+    );
+  } catch (err) {
+    console.warn("LiveKit sendData:", err instanceof Error ? err.message : err);
+  }
 }
 
 async function mintVoiceToken({ roomId, memberId, displayName, canPublish }) {
@@ -105,6 +168,7 @@ async function mintVoiceToken({ roomId, memberId, displayName, canPublish }) {
     throw new Error("Voice is not configured on this server");
   }
 
+  // Host-muted guests stay "on panel" but must not publish
   const at = new AccessToken(apiKey, apiSecret, {
     identity: memberId,
     name: displayName || "Guest",
@@ -115,7 +179,7 @@ async function mintVoiceToken({ roomId, memberId, displayName, canPublish }) {
     room: livekitRoomName(roomId),
     canPublish,
     canSubscribe: true,
-    canPublishData: false,
+    canPublishData: true,
   });
   return at.toJwt();
 }
@@ -203,6 +267,8 @@ function triggerSfx(roomId, hostMemberId, sound) {
     at: Date.now(),
     byName: member.displayName,
   };
+  // Reach people whose browser UI timed out but voice is still up
+  void livekitBroadcastSfx(roomId, id, state.lastSfx.id);
   return state.lastSfx;
 }
 
@@ -234,13 +300,18 @@ function touchMember(roomId, memberId) {
   if (member) member.lastSeen = Date.now();
 }
 
-/** Drop people who stopped polling / closed the tab (~12s of silence). */
-const MEMBER_STALE_MS = 12_000;
+/**
+ * Presence list only: hide people who stopped polling.
+ * Do NOT end panel/live — flaky tunnels drop REST while LiveKit voice still works.
+ * Explicit leave (tab close / leave API) ends panel seat.
+ */
+const MEMBER_STALE_MS = 45_000;
 
 function endLiveForMember(state, memberId) {
   for (const r of state.onAirRequests) {
     if (r.memberId === memberId && r.status === "live") {
       r.status = "done";
+      r.hostMuted = false;
     }
   }
 }
@@ -250,7 +321,7 @@ function pruneStaleMembers(state) {
   for (const [id, member] of state.members.entries()) {
     const last = member.lastSeen || 0;
     if (now - last > MEMBER_STALE_MS) {
-      endLiveForMember(state, id);
+      // Presence only — keep panel + LiveKit seat until host removes or they leave
       state.members.delete(id);
     }
   }
@@ -261,6 +332,8 @@ function leaveRoom(roomId, memberId) {
   if (!state) return;
   endLiveForMember(state, memberId);
   state.members.delete(memberId);
+  // Best-effort stop their LiveKit publish
+  void livekitSetCanPublish(roomId, memberId, false);
 }
 
 function requireMember(roomId, memberId) {
@@ -408,6 +481,7 @@ function setOnAirLive(roomId, hostMemberId, requestId) {
   // Add to panel — do not demote other live guests
   request.status = "live";
   request.hostMuted = false;
+  void livekitSetCanPublish(roomId, request.memberId, true);
   return request;
 }
 
@@ -420,6 +494,8 @@ function togglePanelMute(roomId, hostMemberId, requestId) {
     throw new Error("That person is not on the panel");
   }
   request.hostMuted = !request.hostMuted;
+  // LiveKit-side mute so it works even if their web page timed out
+  void livekitSetCanPublish(roomId, request.memberId, !request.hostMuted);
   return request;
 }
 
@@ -440,6 +516,8 @@ function removeFromPanel(roomId, hostMemberId, requestId) {
     throw new Error("That person is not on the panel");
   }
   request.status = "done";
+  request.hostMuted = false;
+  void livekitSetCanPublish(roomId, request.memberId, false);
   return request;
 }
 
@@ -449,6 +527,8 @@ function clearOnAir(roomId, hostMemberId) {
   for (const r of state.onAirRequests) {
     if (r.status === "live") {
       r.status = "done";
+      r.hostMuted = false;
+      void livekitSetCanPublish(roomId, r.memberId, false);
     }
   }
 }
@@ -713,6 +793,7 @@ async function handleApi(req, res, pathname, query, bodyPromise) {
       const roomId = decodeURIComponent(voiceTokenMatch[1]);
       const memberId = sessionIdFrom(req, body);
       const { state, member } = requireMember(roomId, memberId);
+      // Allow publish only when not host-muted
       const canPublish = memberCanPublish(state, memberId, member.role);
       const token = await mintVoiceToken({
         roomId,
@@ -726,6 +807,7 @@ async function handleApi(req, res, pathname, query, bodyPromise) {
         url: getLiveKitUrl(),
         roomName: livekitRoomName(roomId),
         canPublish,
+        hostMuted: guestHostMuted(state, memberId),
       });
       return true;
     }

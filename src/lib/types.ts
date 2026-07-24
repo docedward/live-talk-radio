@@ -48,6 +48,8 @@ export interface VoiceInfo {
   url: string;
   /** Host has muted this guest’s mic (panel only). */
   hostMuted?: boolean;
+  /** Guest is on the speaker panel (even if host-muted). */
+  onPanel?: boolean;
 }
 
 export interface PresenceMember {

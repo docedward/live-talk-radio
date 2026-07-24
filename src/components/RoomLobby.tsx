@@ -50,6 +50,7 @@ export function RoomLobby({ roomId }: Props) {
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
+  const [controlNote, setControlNote] = useState<string | null>(null);
 
   // Client-only boot: localStorage is never read during SSR
   useEffect(() => {
@@ -72,13 +73,42 @@ export function RoomLobby({ roomId }: Props) {
     if (!snapshot) return;
     let cancelled = false;
 
+    async function rejoinControl() {
+      const creds = loadHostCreds(roomId);
+      const name =
+        (displayName || creds?.displayName || "Guest").trim() || "Guest";
+      try {
+        const result = await joinRoom(roomId, name, creds?.hostToken);
+        if (cancelled) return;
+        setSnapshot(result.snapshot);
+        setControlNote(null);
+      } catch {
+        if (!cancelled) {
+          setControlNote(
+            "Connection to room controls dropped. Voice may still work — tap Refresh page if mute/board fail."
+          );
+        }
+      }
+    }
+
     async function poll() {
       try {
         const result = await fetchSnapshot(roomId);
         if (cancelled) return;
         setSnapshot(result.snapshot);
-      } catch {
-        /* keep last good snapshot */
+        setControlNote(null);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "";
+        // Session dropped from server (stale) but user still on page / in LiveKit
+        if (
+          /not in this room|join first|Room not found/i.test(msg)
+        ) {
+          await rejoinControl();
+        } else if (!cancelled) {
+          setControlNote(
+            "Reconnecting room controls… (voice may still work)"
+          );
+        }
       }
     }
 
@@ -87,22 +117,18 @@ export function RoomLobby({ roomId }: Props) {
       cancelled = true;
       clearInterval(id);
     };
-  }, [snapshot, roomId]);
+  }, [snapshot, roomId, displayName]);
 
-  // Tell the room we left when the tab closes (enables leave cannon for others).
-  // Depend only on joined state — not full snapshot (poll would re-fire leave every 2s).
+  // Only leave on real tab close — not pagehide (phones fire that when backgrounding).
   const hasJoined = !!snapshot;
   useEffect(() => {
     if (!hasJoined) return;
-    const onHide = () => {
+    const onUnload = () => {
       leaveRoomBeacon(roomId);
     };
-    window.addEventListener("pagehide", onHide);
-    window.addEventListener("beforeunload", onHide);
+    window.addEventListener("beforeunload", onUnload);
     return () => {
-      window.removeEventListener("pagehide", onHide);
-      window.removeEventListener("beforeunload", onHide);
-      // Leaving the room page (not every poll)
+      window.removeEventListener("beforeunload", onUnload);
       leaveRoomBeacon(roomId);
     };
   }, [hasJoined, roomId]);
@@ -301,6 +327,12 @@ export function RoomLobby({ roomId }: Props) {
           <strong>Host controls are on.</strong> Approve questions. Add
           listeners to the <strong>speaker panel</strong> (up to {panelCap}{" "}
           guests + you). Remove one or clear the whole panel anytime.
+        </div>
+      )}
+
+      {controlNote && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+          {controlNote}
         </div>
       )}
 
