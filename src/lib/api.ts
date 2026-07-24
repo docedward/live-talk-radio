@@ -138,16 +138,21 @@ export function requestOnAir(roomId: string, note = "") {
   );
 }
 
-/** Host: add to panel (live), reject request, or remove from panel. */
+/** Host: add to panel (live), reject, remove, or toggle mute. */
 export function moderateOnAir(
   roomId: string,
   requestId: string,
-  action: "live" | "reject" | "remove"
+  action: "live" | "reject" | "remove" | "mute"
 ) {
   return api<{ ok: true; request?: OnAirRequest }>(
     `/api/rooms/${encodeURIComponent(roomId)}/on-air/${encodeURIComponent(requestId)}/${action}`,
     { method: "POST", body: JSON.stringify({}) }
   );
+}
+
+/** Host: click name box — mute / unmute panel guest. */
+export function togglePanelMute(roomId: string, requestId: string) {
+  return moderateOnAir(roomId, requestId, "mute");
 }
 
 /** Host: clear entire guest panel. */

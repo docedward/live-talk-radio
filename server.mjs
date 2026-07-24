@@ -82,12 +82,19 @@ function memberCanPublish(state, memberId, role) {
   return isLiveGuest(state, memberId);
 }
 
+function guestHostMuted(state, memberId) {
+  const live = livePanelRequests(state).find((r) => r.memberId === memberId);
+  return !!(live && live.hostMuted);
+}
+
 function voiceInfo(state, memberId, role) {
   const enabled = isVoiceConfigured();
+  const canPublish = enabled && memberCanPublish(state, memberId, role);
   return {
     enabled,
-    canPublish: enabled && memberCanPublish(state, memberId, role),
+    canPublish,
     url: enabled ? getLiveKitUrl() : "",
+    hostMuted: role === "listener" && canPublish && guestHostMuted(state, memberId),
   };
 }
 
@@ -400,6 +407,19 @@ function setOnAirLive(roomId, hostMemberId, requestId) {
 
   // Add to panel — do not demote other live guests
   request.status = "live";
+  request.hostMuted = false;
+  return request;
+}
+
+/** Host toggles mute on a live panel guest (does not remove them). */
+function togglePanelMute(roomId, hostMemberId, requestId) {
+  const { state } = requireHostMember(roomId, hostMemberId);
+  const request = state.onAirRequests.find((r) => r.id === requestId);
+  if (!request) throw new Error("On Air request not found");
+  if (request.status !== "live") {
+    throw new Error("That person is not on the panel");
+  }
+  request.hostMuted = !request.hostMuted;
   return request;
 }
 
@@ -471,15 +491,17 @@ function sessionIdFrom(req, body, query) {
 }
 
 /** Public snapshot fields for API — strip internal memberId from on-air requests */
-function publicRequest(r, viewerMemberId) {
+function publicRequest(r, viewerMemberId, { hideName = false } = {}) {
+  const isMe = Boolean(viewerMemberId && r.memberId === viewerMemberId);
   return {
     id: r.id,
     roomId: r.roomId,
-    authorName: r.authorName,
-    note: r.note,
+    authorName: hideName && !isMe ? "" : r.authorName,
+    note: hideName && !isMe ? "" : r.note,
     status: r.status,
     createdAt: r.createdAt,
-    isMe: Boolean(viewerMemberId && r.memberId === viewerMemberId),
+    isMe,
+    hostMuted: Boolean(r.hostMuted),
   };
 }
 
@@ -488,13 +510,38 @@ function publicSnapshot(roomId, role, memberId) {
   if (!state) throw new Error("Room not found");
   pruneStaleMembers(state);
   const snap = buildSnapshot(roomId, role);
+  const rawPanel = snap.livePanel || [];
+  const panelCount = rawPanel.length;
+
+  // Host sees full panel with names. Listeners only see their own row (if live).
+  let livePanelPublic;
+  if (role === "host") {
+    livePanelPublic = rawPanel.map((r) => publicRequest(r, memberId));
+  } else {
+    livePanelPublic = rawPanel
+      .filter((r) => r.memberId === memberId)
+      .map((r) => publicRequest(r, memberId));
+  }
+
+  // Pending On Air queue: host sees names; listeners see own pending + anonymized others
+  const onAirPublic =
+    role === "host"
+      ? snap.onAirRequests.map((r) => publicRequest(r, memberId))
+      : snap.onAirRequests.map((r) =>
+          publicRequest(r, memberId, {
+            hideName: r.memberId !== memberId,
+          })
+        );
+
   return {
     ...snap,
-    onAirRequests: snap.onAirRequests.map((r) => publicRequest(r, memberId)),
-    liveOnAir: snap.liveOnAir
-      ? publicRequest(snap.liveOnAir, memberId)
-      : null,
-    livePanel: (snap.livePanel || []).map((r) => publicRequest(r, memberId)),
+    onAirRequests: onAirPublic,
+    liveOnAir:
+      role === "host" && snap.liveOnAir
+        ? publicRequest(snap.liveOnAir, memberId)
+        : livePanelPublic[0] || null,
+    livePanel: livePanelPublic,
+    panelCount,
     panelCap: snap.panelCap ?? MAX_PANEL_GUESTS,
     voice: voiceInfo(state, memberId, role),
   };
@@ -684,9 +731,9 @@ async function handleApi(req, res, pathname, query) {
       return true;
     }
 
-    // POST /api/rooms/:id/on-air/:requestId/live|reject|remove
+    // POST /api/rooms/:id/on-air/:requestId/live|reject|remove|mute
     const onAirAction = pathname.match(
-      /^\/api\/rooms\/([^/]+)\/on-air\/([^/]+)\/(live|reject|remove)$/
+      /^\/api\/rooms\/([^/]+)\/on-air\/([^/]+)\/(live|reject|remove|mute)$/
     );
     if (onAirAction && req.method === "POST") {
       const roomId = decodeURIComponent(onAirAction[1]);
@@ -699,6 +746,8 @@ async function handleApi(req, res, pathname, query) {
         request = setOnAirLive(roomId, memberId, requestId);
       } else if (action === "remove") {
         request = removeFromPanel(roomId, memberId, requestId);
+      } else if (action === "mute") {
+        request = togglePanelMute(roomId, memberId, requestId);
       } else {
         request = rejectOnAir(roomId, memberId, requestId);
       }

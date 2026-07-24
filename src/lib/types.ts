@@ -34,6 +34,8 @@ export interface OnAirRequest {
   createdAt: number;
   /** True when this request belongs to the current session (server-computed). */
   isMe?: boolean;
+  /** Host forced this panel guest’s mic off (host-only control). */
+  hostMuted?: boolean;
 }
 
 /** LiveKit media plane status for the current session. */
@@ -44,6 +46,8 @@ export interface VoiceInfo {
   canPublish: boolean;
   /** LiveKit WebSocket URL (public). */
   url: string;
+  /** Host has muted this guest’s mic (panel only). */
+  hostMuted?: boolean;
 }
 
 export interface PresenceMember {
@@ -89,8 +93,13 @@ export interface RoomSnapshot {
    * @deprecated Prefer livePanel. First guest on the panel if any (compat).
    */
   liveOnAir: OnAirRequest | null;
-  /** All guests currently on the speaker panel (live mics). Host is separate. */
+  /**
+   * Live panel guests. Host sees full names; listeners only see their own row
+   * if they are on the panel (names of others are host-only).
+   */
   livePanel: OnAirRequest[];
+  /** How many guests are live (for listeners when names are hidden). */
+  panelCount?: number;
   /** Max simultaneous guest panelists. */
   panelCap: number;
   /** Everyone currently in the room (host + listeners). */

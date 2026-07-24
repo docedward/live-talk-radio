@@ -236,6 +236,7 @@ export function RoomLobby({ roomId }: Props) {
   const voice = snapshot.voice;
   const voiceEnabled = !!voice?.enabled;
   const canPublish = !!voice?.canPublish;
+  const hostMuted = !!voice?.hostMuted;
   const livePanel =
     snapshot.livePanel ??
     (snapshot.liveOnAir ? [snapshot.liveOnAir] : []);
@@ -309,6 +310,7 @@ export function RoomLobby({ roomId }: Props) {
         roomId={roomId}
         enabled={voiceEnabled}
         canPublish={canPublish}
+        hostMuted={hostMuted}
       />
 
       <PresenceSfx

@@ -16,6 +16,8 @@ type Props = {
   canPublish: boolean;
   /** Server has LiveKit configured. */
   enabled: boolean;
+  /** Host forced this guest’s mic off (panel mute). */
+  hostMuted?: boolean;
 };
 
 function isProbablyMobile() {
@@ -29,7 +31,12 @@ function isProbablyMobile() {
  * - HTTPS / secure-context warning when needed
  * - Explicit mic enable when On Air on mobile
  */
-export function VoiceStage({ roomId, canPublish, enabled }: Props) {
+export function VoiceStage({
+  roomId,
+  canPublish,
+  enabled,
+  hostMuted = false,
+}: Props) {
   const [started, setStarted] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [url, setUrl] = useState<string | null>(null);
@@ -155,16 +162,22 @@ export function VoiceStage({ roomId, canPublish, enabled }: Props) {
       className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 dark:border-emerald-900 dark:bg-emerald-950/40"
     >
       <RoomAudioRenderer />
-      <VoiceChrome canPublish={tokenCanPublish} mobile={mobile} />
+      <VoiceChrome
+        canPublish={tokenCanPublish}
+        hostMuted={hostMuted}
+        mobile={mobile}
+      />
     </LiveKitRoom>
   );
 }
 
 function VoiceChrome({
   canPublish,
+  hostMuted,
   mobile,
 }: {
   canPublish: boolean;
+  hostMuted: boolean;
   mobile: boolean;
 }) {
   const connectionState = useConnectionState();
@@ -177,13 +190,11 @@ function VoiceChrome({
     connectionState === ConnectionState.Connecting ||
     connectionState === ConnectionState.Reconnecting;
 
-  // When host (or newly On Air guest) gains publish rights, do not force mic until they tap.
-  // Hosts often want mic immediately after first "Start" — enable once on connect for publishers.
+  // When host (or newly On Air guest) gains publish rights, enable mic unless host-muted.
   useEffect(() => {
     if (!connected || !canPublish || !localParticipant) return;
+    if (hostMuted) return;
     if (isMicrophoneEnabled) return;
-    // Auto-enable mic only after the initial Start tap flow (component only mounts after start).
-    // On mobile, still require an extra Unmute tap if auto fails.
     let cancelled = false;
     (async () => {
       try {
@@ -201,18 +212,25 @@ function VoiceChrome({
     return () => {
       cancelled = true;
     };
-  }, [connected, canPublish, localParticipant, isMicrophoneEnabled, mobile]);
+  }, [
+    connected,
+    canPublish,
+    hostMuted,
+    localParticipant,
+    isMicrophoneEnabled,
+    mobile,
+  ]);
 
-  // When publish rights removed (Clear On Air), force mic off.
+  // Off panel or host-muted → force mic off.
   useEffect(() => {
     if (!localParticipant) return;
-    if (!canPublish && isMicrophoneEnabled) {
+    if ((!canPublish || hostMuted) && isMicrophoneEnabled) {
       void localParticipant.setMicrophoneEnabled(false);
     }
-  }, [canPublish, isMicrophoneEnabled, localParticipant]);
+  }, [canPublish, hostMuted, isMicrophoneEnabled, localParticipant]);
 
   async function toggleMute() {
-    if (!localParticipant || !canPublish) return;
+    if (!localParticipant || !canPublish || hostMuted) return;
     setMicError(null);
     try {
       await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
@@ -245,6 +263,8 @@ function VoiceChrome({
 
   let statusLabel = "Voice off";
   if (connecting) statusLabel = "Connecting…";
+  else if (connected && canPublish && hostMuted)
+    statusLabel = "Host muted your mic — you can still hear the room";
   else if (connected && canPublish && isMicrophoneEnabled)
     statusLabel = "Mic live — the room can hear you";
   else if (connected && canPublish && !isMicrophoneEnabled)
@@ -274,7 +294,7 @@ function VoiceChrome({
             </p>
           )}
         </div>
-        {canPublish && (
+        {canPublish && !hostMuted && (
           <button
             type="button"
             onClick={() => void toggleMute()}
@@ -303,12 +323,22 @@ function VoiceChrome({
       {micError && (
         <p className="text-xs text-red-700 dark:text-red-300">{micError}</p>
       )}
-      {connected && canPublish && !isMicrophoneEnabled && !micError && (
+      {connected && canPublish && hostMuted && (
         <p className="text-xs text-amber-800 dark:text-amber-200">
-          Mic is off. Tap <strong>Unmute</strong>
-          {mobile ? " and allow the microphone" : ""}.
+          The host muted your microphone. You stay on the panel until they
+          unmute or remove you.
         </p>
       )}
+      {connected &&
+        canPublish &&
+        !hostMuted &&
+        !isMicrophoneEnabled &&
+        !micError && (
+          <p className="text-xs text-amber-800 dark:text-amber-200">
+            Mic is off. Tap <strong>Unmute</strong>
+            {mobile ? " and allow the microphone" : ""}.
+          </p>
+        )}
     </div>
   );
 }

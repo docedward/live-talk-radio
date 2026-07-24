@@ -10,6 +10,7 @@ import {
   removeFromPanel,
   requestOnAir,
   submitQuestion,
+  togglePanelMute,
 } from "@/lib/api";
 
 type Props = {
@@ -43,6 +44,7 @@ export function QuestionQueue({
     initialLivePanel
   );
   const [cap, setCap] = useState(panelCap);
+  const [panelCount, setPanelCount] = useState(initialLivePanel.length);
   const [mode, setMode] = useState<ListenerMode>("question");
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +70,11 @@ export function QuestionQueue({
             (result.snapshot.liveOnAir ? [result.snapshot.liveOnAir] : [])
         );
         if (result.snapshot.panelCap) setCap(result.snapshot.panelCap);
+        setPanelCount(
+          result.snapshot.panelCount ??
+            result.snapshot.livePanel?.length ??
+            0
+        );
       } catch {
         /* ignore */
       }
@@ -88,6 +95,9 @@ export function QuestionQueue({
         (result.snapshot.liveOnAir ? [result.snapshot.liveOnAir] : [])
     );
     if (result.snapshot.panelCap) setCap(result.snapshot.panelCap);
+    setPanelCount(
+      result.snapshot.panelCount ?? result.snapshot.livePanel?.length ?? 0
+    );
   }
 
   async function submit(e: React.FormEvent) {
@@ -150,12 +160,23 @@ export function QuestionQueue({
     }
   }
 
+  async function onToggleMute(requestId: string) {
+    setError(null);
+    try {
+      await togglePanelMute(roomId, requestId);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not mute");
+    }
+  }
+
   const pendingQ = questions.filter((q) => q.status === "pending");
   const approvedQ = questions.filter((q) => q.status === "approved");
   const rejectedQ = questions.filter((q) => q.status === "rejected");
   const pendingOnAir = onAirRequests.filter((r) => r.status === "pending");
-  const panelFull = livePanel.length >= cap;
+  const panelFull = panelCount >= cap;
   const iAmOnPanel = livePanel.some((r) => r.isMe);
+  const iAmHostMuted = livePanel.some((r) => r.isMe && r.hostMuted);
 
   return (
     <section className="flex min-h-[320px] flex-1 flex-col rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
@@ -165,18 +186,18 @@ export function QuestionQueue({
         </h2>
         <p className="text-xs text-zinc-500 dark:text-zinc-400">
           {role === "host"
-            ? `Approve questions. Put multiple guests On Air (up to ${cap}).`
+            ? `Approve questions. Tap a green name to mute/unmute (up to ${cap} guests).`
             : "Choose: ask a question, or request to join the speaker panel."}
         </p>
       </header>
 
-      {/* Speaker panel — host + multiple live guests */}
+      {/* Speaker panel — host sees names; listeners only count / own status */}
       <div className="border-b border-zinc-200 bg-violet-50 px-4 py-3 dark:border-zinc-800 dark:bg-violet-950/40">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">
-            Speaker panel ({livePanel.length}/{cap} guests)
+            Speaker panel ({panelCount}/{cap} guests)
           </p>
-          {role === "host" && livePanel.length > 0 && (
+          {role === "host" && panelCount > 0 && (
             <button
               type="button"
               onClick={() => void onClearLive()}
@@ -186,57 +207,73 @@ export function QuestionQueue({
             </button>
           )}
         </div>
-        <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-          Host is always on. Guests below have live mics when voice is
-          connected.
-        </p>
-        {livePanel.length === 0 ? (
-          <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-            No guests on the panel yet. Listeners request On Air; host adds
-            them (up to {cap}).
-          </p>
+
+        {role === "host" ? (
+          <>
+            <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+              Green = live mic. Tap a name to mute/unmute. Remove drops them
+              from the panel.
+            </p>
+            {livePanel.length === 0 ? (
+              <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+                No guests on the panel yet. Approve On Air requests below.
+              </p>
+            ) : (
+              <ul className="mt-2 flex flex-col gap-2">
+                {livePanel.map((r) => {
+                  const muted = !!r.hostMuted;
+                  return (
+                    <li
+                      key={r.id}
+                      className="flex flex-wrap items-center gap-2"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => void onToggleMute(r.id)}
+                        className={`min-h-12 min-w-[8rem] flex-1 rounded-xl border-2 px-3 py-2 text-left transition active:scale-[0.99] ${
+                          muted
+                            ? "border-zinc-400 bg-zinc-100 text-zinc-600 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300"
+                            : "border-emerald-500 bg-emerald-50 text-emerald-950 shadow-sm dark:border-emerald-400 dark:bg-emerald-950/50 dark:text-emerald-50"
+                        }`}
+                      >
+                        <span className="block text-sm font-semibold">
+                          {r.authorName || "Guest"}
+                        </span>
+                        <span className="block text-xs font-medium opacity-80">
+                          {muted ? "Muted — tap to unmute" : "Live — tap to mute"}
+                        </span>
+                      </button>
+                      <HostBtn
+                        label="Remove"
+                        tone="danger"
+                        onClick={() => void onRemoveFromPanel(r.id)}
+                      />
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {panelFull && (
+              <p className="mt-2 text-xs text-amber-800 dark:text-amber-200">
+                Panel full. Remove someone before adding another guest.
+              </p>
+            )}
+          </>
         ) : (
-          <ul className="mt-2 flex flex-col gap-2">
-            {livePanel.map((r) => (
-              <li
-                key={r.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-violet-200 bg-white/80 px-3 py-2 dark:border-violet-800 dark:bg-zinc-950/60"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                    {r.authorName}
-                    {r.isMe ? " (you)" : ""}
-                    <span className="ml-2 text-xs font-normal text-emerald-700 dark:text-emerald-300">
-                      live
-                    </span>
-                  </p>
-                  {r.note ? (
-                    <p className="truncate text-xs text-zinc-600 dark:text-zinc-400">
-                      {r.note}
-                    </p>
-                  ) : null}
-                </div>
-                {role === "host" && (
-                  <HostBtn
-                    label="Remove"
-                    tone="danger"
-                    onClick={() => void onRemoveFromPanel(r.id)}
-                  />
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-        {iAmOnPanel && (
-          <p className="mt-2 text-xs font-medium text-violet-800 dark:text-violet-200">
-            You are on the panel — allow the mic if asked. Host can remove you
-            anytime.
-          </p>
-        )}
-        {panelFull && role === "host" && (
-          <p className="mt-2 text-xs text-amber-800 dark:text-amber-200">
-            Panel full. Remove someone before adding another guest.
-          </p>
+          <>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+              {panelCount === 0
+                ? "No guests on the panel yet."
+                : `${panelCount} guest${panelCount === 1 ? "" : "s"} on the panel with the host.`}
+            </p>
+            {iAmOnPanel && (
+              <p className="mt-2 text-xs font-medium text-emerald-800 dark:text-emerald-200">
+                {iAmHostMuted
+                  ? "You are on the panel but the host muted your mic."
+                  : "You are on the panel — allow the mic if asked."}
+              </p>
+            )}
+          </>
         )}
       </div>
 
