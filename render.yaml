@@ -1,10 +1,8 @@
-# Render Blueprint — FREE web service for Live Talk Radio.
-# Cost: $0 on the Free plan (sleeps after idle; ~750 free hours/month).
-# Deploy: https://dashboard.render.com/select-repo?type=blueprint
-#   or:  https://render.com/deploy?repo=https://github.com/docedward/live-talk-radio
+# Render Blueprint — FREE web service only ($0).
+# No secret prompts on create (LiveKit can be added later in the dashboard).
 #
-# Docs: https://render.com/docs/blueprint-spec
-# Free limits: https://render.com/docs/free
+# https://render.com/docs/blueprint-spec
+# https://render.com/docs/free
 
 services:
   - type: web
@@ -12,7 +10,7 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
@@ -20,13 +18,3 @@ services:
         value: production
       - key: HOSTNAME
         value: 0.0.0.0
-      # Optional — text chat works without these. Set in dashboard for LiveKit voice.
-      - key: LIVEKIT_URL
-        sync: false
-      - key: LIVEKIT_API_KEY
-        sync: false
-      - key: LIVEKIT_API_SECRET
-        sync: false
-      # Optional — set after first deploy to your https://….onrender.com URL
-      - key: PUBLIC_APP_URL
-        sync: false
