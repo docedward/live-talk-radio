@@ -12,13 +12,12 @@ Text-only Live Talk Radio MVP: hosts create rooms, listeners join via link, mode
 - Core pages: home (create/list rooms), room lobby (chat + queue)
 - Host vs listener roles, approve/reject/display question flow
 - Local multi-browser test (Safari + Chrome) — passed
-- Server binds `0.0.0.0` for cloud / LAN access; `render.yaml` added for free Node host
+- GitHub public repo: https://github.com/docedward/live-talk-radio
+- Temporary public tunnel (Cloudflare quick tunnel) for phone tests while Mac is on
 
 ## Next
-- GitHub: first commit + remote push (needs `gh auth login`)
-- Deploy to Render (or similar Node host) for public phone links
+- Permanent free host on Render (Blueprint from `render.yaml` + GitHub) — needs Dr. Ed account click
 - Polish from real-user feedback
 
 ## Blockers
-- GitHub CLI not logged in yet in this environment (user auth required)
-- Pure Vercel serverless is a poor fit for classic Socket.io — using a free Node web host instead
+- Pure Vercel serverless is a poor fit for classic Socket.io — prefer Render free Node web service
