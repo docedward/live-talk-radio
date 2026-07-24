@@ -1,22 +1,35 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Bebas_Neue, Share_Tech_Mono, Source_Sans_3 } from "next/font/google";
+import { RadioShell } from "@/components/RadioShell";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+/** Bold station call-letter display — classic AM masthead. */
+const fontDisplay = Bebas_Neue({
+  weight: "400",
   subsets: ["latin"],
+  variable: "--font-display",
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+/** LCD / frequency / ON AIR readout. */
+const fontLcd = Share_Tech_Mono({
+  weight: "400",
   subsets: ["latin"],
+  variable: "--font-lcd",
+  display: "swap",
+});
+
+/** Readable body for chat & forms (not a novelty font). */
+const fontBody = Source_Sans_3({
+  subsets: ["latin"],
+  variable: "--font-body",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Live Talk Radio",
+  title: "Live Talk Radio · W-LTR AM",
   description:
-    "Live talk radio with voice panel, chat, and host soundboard.",
-  // Help mobile keep the page more active during a show
+    "Live talk radio with voice panel, chat, and host soundboard — 1980s AM vibe.",
   other: {
     "mobile-web-app-capable": "yes",
     "apple-mobile-web-app-capable": "yes",
@@ -32,13 +45,13 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${fontDisplay.variable} ${fontLcd.variable} ${fontBody.variable} h-full antialiased`}
     >
       <body
         suppressHydrationWarning
-        className="min-h-full flex flex-col bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50"
+        className="flex min-h-full flex-col bg-[#0d0906] text-[#1c1410]"
       >
-        {children}
+        <RadioShell>{children}</RadioShell>
       </body>
     </html>
   );

@@ -41,13 +41,16 @@ export function RoomList() {
   }, []);
 
   return (
-    <section className="flex w-full flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+    <section className="flex w-full flex-col gap-3 rounded-2xl border border-[#d4c4a8] bg-[#fffdf8] p-6 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+          <p className="radio-lcd text-[0.65rem] uppercase tracking-[0.2em] text-[#8b3a1a]">
+            Dial-in board
+          </p>
+          <h2 className="mt-1 text-xl tracking-wide text-[#1c1410]">
             Open rooms
           </h2>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="mt-1 text-sm text-[#6b5a48]">
             Join as a listener — or open a share link someone sent you.
           </p>
         </div>

@@ -1,26 +1,526 @@
 @import "tailwindcss";
 
+/*
+  1980s AM radio theme — code budget:
+  - CSS only (gradients, shadows, repeating-linear-gradient grilles)
+  - 2–3 Google fonts via next/font (layout.tsx)
+  - No images, no animation libraries
+*/
+
 :root {
-  --background: #fafafa;
-  --foreground: #171717;
+  /* Walnut / bakelite chassis */
+  --radio-wood-1: #3d2817;
+  --radio-wood-2: #5c3d24;
+  --radio-wood-3: #2a1a0f;
+  --radio-chrome: #c4b8a8;
+  --radio-chrome-dark: #8a7f72;
+  --radio-amber: #ffb020;
+  --radio-amber-dim: #c47a10;
+  --radio-amber-glow: rgba(255, 176, 32, 0.55);
+  --radio-lcd-bg: #1a1408;
+  --radio-lcd-fg: #e8a820;
+  --radio-glass: #f4efe4;
+  --radio-glass-ink: #1c1410;
+  --radio-panel: #fffdf8;
+  --radio-panel-border: #d4c4a8;
+  --radio-muted: #6b5a48;
+  --radio-accent: #8b3a1a; /* warm brick, not cold violet */
+  --radio-accent-soft: #f3e0c8;
+  --radio-live: #2d6a3e;
+  --radio-live-soft: #d8f0df;
+
+  --background: var(--radio-wood-3);
+  --foreground: var(--radio-glass-ink);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #09090b;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-lcd);
+  --font-display: var(--font-display);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-body), system-ui, sans-serif;
+}
+
+/* ─── Chassis ─── */
+
+.radio-app {
+  min-height: 100%;
+  padding: 0.65rem;
+  background:
+    radial-gradient(ellipse 120% 80% at 50% 0%, #4a3220 0%, transparent 55%),
+    linear-gradient(180deg, #1a1008 0%, #0d0906 100%);
+}
+
+@media (min-width: 640px) {
+  .radio-app {
+    padding: 1.25rem 1.5rem 1.75rem;
+  }
+}
+
+.radio-chassis {
+  margin: 0 auto;
+  max-width: 72rem;
+  border-radius: 1.25rem 1.25rem 1.5rem 1.5rem;
+  border: 3px solid #1a1008;
+  background:
+    linear-gradient(
+      145deg,
+      var(--radio-wood-2) 0%,
+      var(--radio-wood-1) 38%,
+      var(--radio-wood-3) 100%
+    );
+  box-shadow:
+    0 0 0 1px rgba(255, 220, 160, 0.12) inset,
+    0 0 0 6px #24160c,
+    0 0 0 8px #0a0604,
+    0 18px 40px rgba(0, 0, 0, 0.55),
+    0 4px 12px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+/* Wood grain (cheap CSS texture) */
+.radio-chassis::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0.12;
+  background: repeating-linear-gradient(
+    92deg,
+    transparent 0 3px,
+    rgba(0, 0, 0, 0.35) 3px 4px,
+    transparent 4px 9px,
+    rgba(255, 200, 120, 0.08) 9px 10px
+  );
+  z-index: 0;
+}
+
+.radio-chassis {
+  position: relative;
+}
+
+.radio-brand-bar,
+.radio-dial-strip,
+.radio-screen,
+.radio-grille {
+  position: relative;
+  z-index: 1;
+}
+
+/* ─── Brand bar ─── */
+
+.radio-brand-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem 0.5rem;
+}
+
+.radio-brand-mark {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.radio-brand-center {
+  text-align: center;
+  min-width: 0;
+  flex: 1;
+}
+
+.radio-callsign {
+  font-family: var(--font-lcd), ui-monospace, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.28em;
+  color: var(--radio-amber);
+  text-shadow: 0 0 8px var(--radio-amber-glow);
+  margin: 0;
+}
+
+.radio-title {
+  font-family: var(--font-display), Impact, "Arial Black", sans-serif;
+  font-weight: 400;
+  font-size: clamp(1.35rem, 4vw, 2rem);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #f5e6c8;
+  text-shadow:
+    0 1px 0 #1a1008,
+    0 2px 0 rgba(0, 0, 0, 0.4);
+  margin: 0.1rem 0 0;
+  line-height: 1.05;
+}
+
+.radio-onair {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  flex-shrink: 0;
+  min-width: 3.25rem;
+}
+
+.radio-onair-led {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 999px;
+  background: radial-gradient(circle at 35% 30%, #ffd060, #e02010 55%, #600808);
+  box-shadow:
+    0 0 10px rgba(255, 40, 20, 0.85),
+    0 0 2px #fff inset;
+  animation: radio-blink 1.6s ease-in-out infinite;
+}
+
+@keyframes radio-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .radio-onair-led {
+    animation: none;
+  }
+}
+
+.radio-onair-label {
+  font-family: var(--font-lcd), ui-monospace, monospace;
+  font-size: 0.55rem;
+  letter-spacing: 0.12em;
+  color: #ff6a4a;
+  font-weight: 600;
+}
+
+/* ─── Knobs ─── */
+
+.radio-knob {
+  display: inline-block;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 32% 28%, #e8e0d4 0%, #9a9084 42%, #4a443c 100%);
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.45),
+    0 0 0 2px #2a2218,
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  position: relative;
+}
+
+.radio-knob::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 12%;
+  width: 2px;
+  height: 38%;
+  background: #2a2218;
+  border-radius: 1px;
+  transform: translateX(-50%);
+}
+
+.radio-knob-sm {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.radio-knob-lg {
+  width: 2.75rem;
+  height: 2.75rem;
+}
+
+.radio-knob-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.radio-knob-cap {
+  font-family: var(--font-lcd), ui-monospace, monospace;
+  font-size: 0.55rem;
+  letter-spacing: 0.14em;
+  color: var(--radio-chrome);
+  opacity: 0.85;
+}
+
+/* ─── Dial strip ─── */
+
+.radio-dial-strip {
+  display: flex;
+  align-items: stretch;
+  gap: 0.65rem;
+  padding: 0.35rem 0.85rem 0.75rem;
+}
+
+.radio-dial-window {
+  flex: 1;
+  min-width: 0;
+  border-radius: 0.5rem;
+  border: 2px solid #0d0a06;
+  background:
+    linear-gradient(180deg, #2a220f 0%, var(--radio-lcd-bg) 40%, #0f0c06 100%);
+  box-shadow:
+    inset 0 2px 8px rgba(0, 0, 0, 0.65),
+    0 1px 0 rgba(255, 220, 160, 0.1);
+  padding: 0.45rem 0.55rem 0.35rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.radio-freq-scale {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  font-family: var(--font-lcd), ui-monospace, monospace;
+  font-size: clamp(0.55rem, 2vw, 0.75rem);
+  letter-spacing: 0.04em;
+  color: var(--radio-lcd-fg);
+  opacity: 0.75;
+  padding: 0 0.15rem;
+  border-bottom: 1px solid rgba(232, 168, 32, 0.25);
+  padding-bottom: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+
+.radio-freq-active {
+  color: #ffe08a;
+  opacity: 1;
+  font-size: 1.05em;
+  text-shadow: 0 0 8px var(--radio-amber-glow);
+}
+
+.radio-needle {
+  position: absolute;
+  left: 48%;
+  top: 0.35rem;
+  bottom: 1.35rem;
+  width: 2px;
+  background: linear-gradient(180deg, #ff4040, #c01010);
+  box-shadow: 0 0 6px rgba(255, 60, 40, 0.7);
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+.radio-band-label {
+  margin: 0;
+  font-family: var(--font-lcd), ui-monospace, monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.2em;
+  color: var(--radio-amber-dim);
+  text-align: center;
+}
+
+.radio-tuning-knobs {
+  display: none;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.15rem 0.25rem;
+}
+
+@media (min-width: 640px) {
+  .radio-tuning-knobs {
+    display: flex;
+  }
+}
+
+/* ─── Screen (content well) ─── */
+
+.radio-screen {
+  margin: 0 0.65rem 0.65rem;
+  border-radius: 0.85rem;
+  border: 2px solid #1a120a;
+  background:
+    linear-gradient(180deg, #faf6ee 0%, var(--radio-glass) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -2px 12px rgba(60, 40, 20, 0.08),
+    0 2px 0 rgba(255, 220, 160, 0.08);
+  color: var(--radio-glass-ink);
+  /* Room for sticky bars inside */
+  min-height: min(70vh, 40rem);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 640px) {
+  .radio-screen {
+    margin: 0 0.9rem 0.85rem;
+    min-height: min(72vh, 48rem);
+  }
+}
+
+/* Slight CRT/glass tint overlay — pointer-events none, very light */
+.radio-screen::after {
+  content: "";
+  pointer-events: none;
+  position: sticky;
+  top: 0;
+  display: block;
+  height: 0;
+  /* no cover so content stays sharp on phones */
+}
+
+/* ─── Speaker grille ─── */
+
+.radio-grille {
+  padding: 0.55rem 0.9rem 0.75rem;
+}
+
+.radio-grille-mesh {
+  height: 2.4rem;
+  border-radius: 0.45rem;
+  border: 2px solid #150e08;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      #1a120c 0px,
+      #1a120c 2px,
+      #3a2818 2px,
+      #3a2818 5px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0px,
+      transparent 6px,
+      rgba(0, 0, 0, 0.35) 6px,
+      rgba(0, 0, 0, 0.35) 7px
+    );
+  box-shadow:
+    inset 0 2px 8px rgba(0, 0, 0, 0.55),
+    0 1px 0 rgba(255, 220, 160, 0.08);
+}
+
+.radio-grille-tag {
+  margin: 0.35rem 0 0;
+  text-align: center;
+  font-family: var(--font-lcd), ui-monospace, monospace;
+  font-size: 0.55rem;
+  letter-spacing: 0.28em;
+  color: var(--radio-chrome-dark);
+}
+
+/* ─── Theme helpers for app content ─── */
+
+.radio-screen h1,
+.radio-screen h2,
+.radio-heading {
+  font-family: var(--font-display), Impact, "Arial Black", sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.radio-lcd {
+  font-family: var(--font-lcd), ui-monospace, monospace;
+  letter-spacing: 0.06em;
+}
+
+/* Warm sticky bars inside room */
+.radio-sticky {
+  background: rgba(250, 246, 238, 0.94) !important;
+  border-color: var(--radio-panel-border) !important;
+}
+
+/* Soften default violet accents toward brick/amber when we use utility classes */
+.radio-screen .bg-violet-600 {
+  background-color: #9a3f1c !important;
+}
+.radio-screen .bg-violet-600:hover,
+.radio-screen .hover\:bg-violet-500:hover {
+  background-color: #b34d24 !important;
+}
+.radio-screen .text-violet-700,
+.radio-screen .text-violet-600,
+.radio-screen .dark\:text-violet-300 {
+  color: #8b3a1a !important;
+}
+.radio-screen .text-violet-300 {
+  color: #c45a2a !important;
+}
+.radio-screen .bg-violet-50,
+.radio-screen .bg-violet-100 {
+  background-color: var(--radio-accent-soft) !important;
+}
+.radio-screen .border-violet-200,
+.radio-screen .border-violet-400 {
+  border-color: #d4a574 !important;
+}
+.radio-screen .ring-violet-500 {
+  --tw-ring-color: #c47a10 !important;
+}
+.radio-screen .bg-violet-950\/40,
+.radio-screen .bg-violet-950\/50,
+.radio-screen .dark\:bg-violet-950\/40,
+.radio-screen .dark\:bg-violet-950\/50 {
+  background-color: rgba(139, 58, 26, 0.12) !important;
+}
+.radio-screen .text-violet-900 {
+  color: #5c2814 !important;
+}
+
+/* Cards / panels feel inset into the radio glass */
+.radio-screen section.rounded-2xl,
+.radio-screen form.rounded-2xl,
+.radio-screen .rounded-2xl.border {
+  border-color: var(--radio-panel-border);
+  background-color: var(--radio-panel);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset,
+    0 2px 8px rgba(60, 40, 20, 0.06);
+}
+
+/* Kill pure black page chrome inside glass — keep content readable */
+.radio-screen .dark\:bg-zinc-950,
+.radio-screen .dark\:bg-black {
+  background-color: var(--radio-panel) !important;
+}
+.radio-screen .dark\:text-zinc-50,
+.radio-screen .dark\:text-zinc-100 {
+  color: var(--radio-glass-ink) !important;
+}
+.radio-screen .dark\:border-zinc-800,
+.radio-screen .dark\:border-zinc-700 {
+  border-color: var(--radio-panel-border) !important;
+}
+.radio-screen .dark\:text-zinc-400,
+.radio-screen .dark\:text-zinc-300 {
+  color: var(--radio-muted) !important;
+}
+.radio-screen .dark\:bg-zinc-900,
+.radio-screen .dark\:bg-zinc-800 {
+  background-color: #f0e8da !important;
+}
+.radio-screen .bg-zinc-50,
+.radio-screen .bg-white {
+  background-color: var(--radio-panel) !important;
+}
+.radio-screen .text-zinc-900,
+.radio-screen .text-zinc-50 {
+  color: var(--radio-glass-ink) !important;
+}
+.radio-screen .text-zinc-600,
+.radio-screen .text-zinc-500,
+.radio-screen .text-zinc-400 {
+  color: var(--radio-muted) !important;
+}
+.radio-screen .border-zinc-200,
+.radio-screen .border-zinc-300 {
+  border-color: var(--radio-panel-border) !important;
+}
+
+/* Dark mode OS preference: still keep radio glass light (AM radio face) */
+@media (prefers-color-scheme: dark) {
+  .radio-screen {
+    background: linear-gradient(180deg, #f0e8d8 0%, #e8dfd0 100%);
+    color: var(--radio-glass-ink);
+  }
 }

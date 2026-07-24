@@ -258,19 +258,25 @@ export function RoomLobby({ roomId }: Props) {
     const canTapEnter = !joining;
 
     return (
-      <div className="mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-10">
+      <div className="mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-8">
         <Link
           href="/"
-          className="text-sm text-violet-700 hover:underline dark:text-violet-300"
+          className="radio-lcd text-xs uppercase tracking-[0.14em] text-[#8b3a1a] hover:underline"
         >
           ← Back to rooms
         </Link>
-        <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-          <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+        <div className="rounded-2xl border border-[#d4c4a8] bg-[#fffdf8] p-6 shadow-sm">
+          <p className="radio-lcd text-[0.65rem] uppercase tracking-[0.2em] text-[#8b3a1a]">
+            Studio entrance
+          </p>
+          <h1 className="mt-1 text-2xl tracking-wide text-[#1c1410]">
             Join room
           </h1>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            Room code: <span className="font-mono">{roomId}</span>
+          <p className="mt-1 text-sm text-[#6b5a48]">
+            Room code:{" "}
+            <span className="radio-lcd tracking-wider text-[#1c1410]">
+              {roomId}
+            </span>
           </p>
 
           <label className="mt-4 flex flex-col gap-1.5 text-sm">
@@ -321,7 +327,7 @@ export function RoomLobby({ roomId }: Props) {
                 avatarId
               )
             }
-            className="mt-4 min-h-12 w-full rounded-xl bg-violet-600 px-4 py-3 text-base font-semibold text-white hover:bg-violet-500 active:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-4 min-h-12 w-full rounded-xl bg-[#9a3f1c] px-4 py-3 text-base font-semibold text-[#fff8f0] hover:bg-[#b34d24] active:bg-[#7a3216] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {joining
               ? "Joining…"
@@ -358,22 +364,22 @@ export function RoomLobby({ roomId }: Props) {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 pb-10 pt-0 sm:pt-6">
       {/* Sticky bar: always on screen on phones — share is not buried at top-right after scroll */}
-      <div className="sticky top-0 z-40 -mx-4 border-b border-zinc-200 bg-zinc-50/95 px-4 py-3 backdrop-blur-md dark:border-zinc-800 dark:bg-black/95">
+      <div className="radio-sticky sticky top-0 z-40 -mx-4 border-b border-[#d4c4a8] bg-[#faf6ee]/95 px-4 py-3 backdrop-blur-md">
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
             <Link
               href="/"
-              className="text-xs text-violet-700 hover:underline dark:text-violet-300"
+              className="radio-lcd text-[0.65rem] uppercase tracking-[0.14em] text-[#8b3a1a] hover:underline"
             >
               ← Rooms
             </Link>
-            <h1 className="truncate text-base font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-xl">
+            <h1 className="truncate text-base tracking-wide text-[#1c1410] sm:text-xl">
               {snapshot.room.name}
             </h1>
-            <p className="flex items-center gap-1.5 truncate text-xs text-zinc-600 dark:text-zinc-400">
+            <p className="flex items-center gap-1.5 truncate text-xs text-[#6b5a48]">
               {avatarId && <PlayingCard cardId={avatarId} size="xs" />}
-              <span className="truncate">
-                {isHost ? "Host" : "Listener"}
+              <span className="radio-lcd truncate tracking-wide">
+                {isHost ? "HOST" : "LISTENER"}
                 {displayName ? ` · ${displayName}` : ""}
               </span>
             </p>
@@ -381,7 +387,7 @@ export function RoomLobby({ roomId }: Props) {
           <button
             type="button"
             onClick={() => void shareOrCopyLink()}
-            className="min-h-12 shrink-0 rounded-xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-violet-500 active:bg-violet-700"
+            className="min-h-12 shrink-0 rounded-xl bg-[#9a3f1c] px-4 py-3 text-sm font-semibold text-[#fff8f0] shadow-sm hover:bg-[#b34d24] active:bg-[#7a3216]"
           >
             Share link
           </button>
