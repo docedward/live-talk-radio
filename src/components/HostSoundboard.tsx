@@ -32,7 +32,12 @@ export function HostSoundboard({ roomId }: Props) {
     setError(null);
     setBusy(id);
     await unlockHostSfx();
-    playHostSfx(id); // host hears right away
+    const heard = await playHostSfx(id); // host hears right away
+    if (!heard) {
+      setError(
+        "Browser blocked sound — tap “Tap to enable soundboard audio” above, then try again."
+      );
+    }
     try {
       await triggerRoomSfx(roomId, id);
       setLast(label);

@@ -460,26 +460,54 @@ function playBuffer(c: AudioContext, buf: AudioBuffer) {
   src.start();
 }
 
-/** Play one board sound (host click or room broadcast). */
-export function playHostSfx(id: HostSfxId): void {
+/**
+ * Play one board sound (host click or room broadcast).
+ * Prefer HTMLAudioElement first — browsers allow it more reliably after a tap
+ * than Web Audio alone (fixes “host board silent / listeners hear nothing”).
+ */
+export async function playHostSfx(id: HostSfxId): Promise<boolean> {
+  await unlockHostSfx();
+
+  // 1) HTML <audio> path (best after a real click)
+  try {
+    const audio = new Audio(`/sfx/${id}.wav`);
+    audio.volume = 0.95;
+    await audio.play();
+    return true;
+  } catch {
+    /* fall through to Web Audio */
+  }
+
+  // 2) Web Audio buffer / synth fallback
   const c = ac();
-  if (!c) return;
-  void c.resume().catch(() => undefined);
+  if (!c) return false;
+  try {
+    await c.resume();
+  } catch {
+    return false;
+  }
 
   const cached = bufferCache.get(id);
   if (cached) {
     playBuffer(c, cached);
-    return;
+    return true;
   }
 
-  void loadBuffer(c, id).then((buf) => {
+  try {
+    const buf = await loadBuffer(c, id);
     if (buf) {
       playBuffer(c, buf);
-      return;
+      return true;
     }
     const fn = PLAYERS[id];
-    if (fn) fn(c);
-  });
+    if (fn) {
+      fn(c);
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
 }
 
 export function isHostSfxId(v: string): v is HostSfxId {
