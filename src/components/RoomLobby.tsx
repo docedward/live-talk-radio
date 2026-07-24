@@ -84,12 +84,19 @@ export function RoomLobby({ roomId }: Props) {
     setError(null);
     setJoining(true);
 
+    // Old phones sometimes leave this stuck; always clear after a hard timeout.
+    const stuckTimer = window.setTimeout(() => {
+      setJoining(false);
+    }, 20000);
+
     try {
-      const result = await joinRoom(roomId, name, hostToken);
+      const safeName = (name || "").trim() || "Guest";
+      const result = await joinRoom(roomId, safeName, hostToken);
       setSnapshot(result.snapshot);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not join room");
     } finally {
+      window.clearTimeout(stuckTimer);
       setJoining(false);
     }
   }
@@ -126,8 +133,14 @@ export function RoomLobby({ roomId }: Props) {
 
   // Same join UI on server + first client paint (empty name until boot finishes)
   if (!snapshot) {
+    const nameReady = displayName.trim().length > 0;
+    // Only block while an in-flight join is running — never because of boot/name.
+    // Empty name → "Guest" (server already accepts that). Old phones often never
+    // filled the name field and saw a permanently grey button.
+    const canTapEnter = !joining;
+
     return (
-      <div className="mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-16">
+      <div className="mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-10">
         <Link
           href="/"
           className="text-sm text-violet-700 hover:underline dark:text-violet-300"
@@ -149,11 +162,19 @@ export function RoomLobby({ roomId }: Props) {
             <input
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="e.g. Alex"
+              onInput={(e) =>
+                setDisplayName((e.target as HTMLInputElement).value)
+              }
+              placeholder="Type your name (or leave blank)"
               autoComplete="nickname"
-              className="rounded-xl border border-zinc-300 bg-white px-3 py-2 outline-none ring-violet-500 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+              autoCapitalize="words"
+              enterKeyHint="go"
+              className="min-h-12 rounded-xl border border-zinc-300 bg-white px-3 py-3 text-base outline-none ring-violet-500 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
               maxLength={40}
             />
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              Optional — if empty you join as &quot;Guest&quot;.
+            </span>
           </label>
 
           {error && (
@@ -164,12 +185,24 @@ export function RoomLobby({ roomId }: Props) {
 
           <button
             type="button"
-            disabled={joining || !booted || !displayName.trim()}
-            onClick={() => join(displayName.trim())}
-            className="mt-4 w-full rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-50"
+            disabled={!canTapEnter}
+            onClick={() =>
+              void join(displayName.trim() || "Guest", hostCreds?.hostToken)
+            }
+            className="mt-4 min-h-12 w-full rounded-xl bg-violet-600 px-4 py-3 text-base font-semibold text-white hover:bg-violet-500 active:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {joining || (booted && hostCreds) ? "Joining…" : "Enter room"}
+            {joining
+              ? "Joining…"
+              : nameReady
+                ? "Enter room"
+                : "Enter room as Guest"}
           </button>
+
+          {joining && (
+            <p className="mt-2 text-center text-xs text-zinc-500">
+              Connecting… if this hangs, refresh the page and try again.
+            </p>
+          )}
         </div>
       </div>
     );

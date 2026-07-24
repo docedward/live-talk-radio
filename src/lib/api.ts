@@ -15,15 +15,23 @@ const SESSION_KEY = "ltr-session-id";
 
 export function getSessionId(): string {
   if (typeof window === "undefined") return "server";
-  let id = localStorage.getItem(SESSION_KEY);
-  if (!id) {
-    id =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `s-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    localStorage.setItem(SESSION_KEY, id);
+
+  const makeId = () =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `s-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  // Private / old browsers sometimes throw on localStorage
+  try {
+    let id = localStorage.getItem(SESSION_KEY);
+    if (!id) {
+      id = makeId();
+      localStorage.setItem(SESSION_KEY, id);
+    }
+    return id;
+  } catch {
+    return makeId();
   }
-  return id;
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
