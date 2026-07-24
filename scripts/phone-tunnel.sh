@@ -13,6 +13,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CF="${HOME}/GrokBox/.tools/cloudflared"
 OUT_HTML="${HOME}/GrokBox/outputs/open-live-talk-radio.html"
 OUT_URL="${HOME}/GrokBox/outputs/live-talk-radio-public-url.txt"
+# App reads this so Share rewrites localhost → public HTTPS
+PROJECT_URL_FILE="${ROOT}/.public-url"
 
 if [[ ! -x "$CF" ]]; then
   echo "cloudflared not found at $CF"
@@ -54,6 +56,7 @@ trap cleanup EXIT
     URL="$(echo "$line" | grep -oE 'https://[a-zA-Z0-9.-]+\.trycloudflare\.com' | head -1)"
     if [[ -n "$URL" ]]; then
       echo "$URL" > "$OUT_URL"
+      echo "$URL" > "$PROJECT_URL_FILE"
       cat > "$OUT_HTML" <<EOF
 <!DOCTYPE html>
 <html lang="en">

@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { RoomSnapshot } from "@/lib/types";
-import { fetchSnapshot, joinRoom, leaveRoomBeacon } from "@/lib/api";
+import {
+  fetchSnapshot,
+  getShareableRoomUrl,
+  joinRoom,
+  leaveRoomBeacon,
+} from "@/lib/api";
 import { ChatPanel } from "./ChatPanel";
 import { QuestionQueue } from "./QuestionQueue";
 import { PresencePanel } from "./PresencePanel";
@@ -126,14 +131,26 @@ export function RoomLobby({ roomId }: Props) {
   }
 
   async function shareOrCopyLink() {
-    const url = window.location.href;
     const title = snapshot?.room.name || "Live Talk Radio";
+    // Remote guests cannot open localhost — use public HTTPS tunnel when available
+    const url = await getShareableRoomUrl();
+    const isPublic = url.startsWith("https://");
 
-    // Phones: system share sheet is easier than clipboard + tiny buttons
-    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+    if (
+      typeof navigator !== "undefined" &&
+      typeof navigator.share === "function"
+    ) {
       try {
-        await navigator.share({ title, url, text: `Join ${title}` });
-        setShareNote("Share sheet opened.");
+        await navigator.share({
+          title,
+          url,
+          text: `Join ${title}: ${url}`,
+        });
+        setShareNote(
+          isPublic
+            ? "Share sheet opened (public HTTPS link for remote guests)."
+            : "Shared — remote people need an https:// link, not localhost."
+        );
         return;
       } catch {
         /* cancelled or failed — fall through to copy */
@@ -142,13 +159,10 @@ export function RoomLobby({ roomId }: Props) {
 
     try {
       await navigator.clipboard.writeText(url);
-      const isLocal =
-        window.location.hostname === "localhost" ||
-        window.location.hostname === "127.0.0.1";
       setShareNote(
-        isLocal
-          ? "Link copied (localhost). Phones need the HTTPS tunnel link."
-          : "Link copied — paste it to listeners."
+        isPublic
+          ? "Public link copied — send this to remote listeners."
+          : "Copied localhost only — remote people cannot open this. Tunnel may be down."
       );
     } catch {
       setShareNote(url);

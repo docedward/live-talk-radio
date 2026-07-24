@@ -234,3 +234,39 @@ export function fetchVoiceToken(roomId: string) {
 export function pingHealth() {
   return api<{ ok: true; voice?: boolean }>("/api/health");
 }
+
+/** HTTPS public base (Cloudflare tunnel) for sharing with remote guests. */
+export function fetchPublicBase() {
+  return api<{ ok: true; url: string | null; hasPublicUrl: boolean }>(
+    "/api/public-base"
+  );
+}
+
+/**
+ * Room URL remote people can open. Rewrites localhost/LAN → tunnel HTTPS.
+ */
+export async function getShareableRoomUrl(): Promise<string> {
+  const here = typeof window !== "undefined" ? window.location.href : "";
+  const host = typeof window !== "undefined" ? window.location.hostname : "";
+  const isLocal =
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host.startsWith("192.168.") ||
+    host.startsWith("10.");
+
+  if (!isLocal) return here;
+
+  try {
+    const { url: base } = await fetchPublicBase();
+    if (base) {
+      const path =
+        typeof window !== "undefined"
+          ? window.location.pathname + window.location.search
+          : "";
+      return `${base.replace(/\/$/, "")}${path}`;
+    }
+  } catch {
+    /* fall through */
+  }
+  return here;
+}

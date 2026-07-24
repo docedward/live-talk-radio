@@ -494,6 +494,38 @@ function methodHasBody(method) {
   return method === "POST" || method === "PUT" || method === "PATCH";
 }
 
+/** Public HTTPS base for Share (remote guests cannot use localhost). */
+function getPublicAppBase() {
+  const fromEnv = (
+    process.env.PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    ""
+  )
+    .trim()
+    .replace(/\/$/, "");
+  if (fromEnv) return fromEnv;
+  try {
+    const p = resolve(__dirname, ".public-url");
+    if (existsSync(p)) {
+      return readFileSync(p, "utf8").trim().replace(/\/$/, "");
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const p = resolve(
+      process.env.HOME || "",
+      "GrokBox/outputs/live-talk-radio-public-url.txt"
+    );
+    if (existsSync(p)) {
+      return readFileSync(p, "utf8").trim().replace(/\/$/, "");
+    }
+  } catch {
+    /* ignore */
+  }
+  return "";
+}
+
 function sendJson(res, status, data) {
   const body = JSON.stringify(data);
   res.writeHead(status, {
@@ -587,6 +619,16 @@ async function handleApi(req, res, pathname, query, bodyPromise) {
       sendJson(res, 200, {
         ok: true,
         voice: isVoiceConfigured(),
+      });
+      return true;
+    }
+
+    if (pathname === "/api/public-base" && req.method === "GET") {
+      const url = getPublicAppBase();
+      sendJson(res, 200, {
+        ok: true,
+        url: url || null,
+        hasPublicUrl: Boolean(url),
       });
       return true;
     }
