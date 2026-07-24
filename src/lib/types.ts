@@ -2,7 +2,10 @@
 
 export type Role = "host" | "listener";
 
-export type QuestionStatus = "pending" | "approved" | "rejected" | "displayed";
+export type QuestionStatus = "pending" | "approved" | "rejected";
+
+/** Listener asked to be featured on air; host approves → live. */
+export type OnAirStatus = "pending" | "live" | "rejected" | "done";
 
 export interface ChatMessage {
   id: string;
@@ -19,6 +22,21 @@ export interface Question {
   text: string;
   status: QuestionStatus;
   createdAt: number;
+}
+
+export interface OnAirRequest {
+  id: string;
+  roomId: string;
+  authorName: string;
+  /** Optional note from the listener (topic, why, etc.) */
+  note: string;
+  status: OnAirStatus;
+  createdAt: number;
+}
+
+export interface PresenceMember {
+  displayName: string;
+  role: Role;
 }
 
 export interface Room {
@@ -38,52 +56,10 @@ export interface RoomSnapshot {
   role: Role;
   messages: ChatMessage[];
   questions: Question[];
-  displayedQuestion: Question | null;
+  onAirRequests: OnAirRequest[];
+  /** Who is currently featured on air (from an approved request). */
+  liveOnAir: OnAirRequest | null;
+  /** Everyone currently in the room (host + listeners). */
+  presence: PresenceMember[];
   listenerCount: number;
-}
-
-/** Events the browser sends to the server. */
-export interface ClientToServerEvents {
-  "room:list": (ack: (rooms: { id: string; name: string; listenerCount: number }[]) => void) => void;
-  "room:create": (
-    payload: { name: string; hostName: string },
-    ack: (result: { ok: true; roomId: string; hostToken: string } | { ok: false; error: string }) => void
-  ) => void;
-  "room:join": (
-    payload: { roomId: string; displayName: string; hostToken?: string },
-    ack: (result: { ok: true; snapshot: RoomSnapshot } | { ok: false; error: string }) => void
-  ) => void;
-  "chat:send": (
-    payload: { roomId: string; text: string },
-    ack: (result: { ok: true } | { ok: false; error: string }) => void
-  ) => void;
-  "question:submit": (
-    payload: { roomId: string; text: string },
-    ack: (result: { ok: true; question: Question } | { ok: false; error: string }) => void
-  ) => void;
-  "question:approve": (
-    payload: { roomId: string; questionId: string },
-    ack: (result: { ok: true } | { ok: false; error: string }) => void
-  ) => void;
-  "question:reject": (
-    payload: { roomId: string; questionId: string },
-    ack: (result: { ok: true } | { ok: false; error: string }) => void
-  ) => void;
-  "question:display": (
-    payload: { roomId: string; questionId: string },
-    ack: (result: { ok: true } | { ok: false; error: string }) => void
-  ) => void;
-  "question:clear-display": (
-    payload: { roomId: string },
-    ack: (result: { ok: true } | { ok: false; error: string }) => void
-  ) => void;
-}
-
-/** Events the server pushes to everyone in a room (or to one client). */
-export interface ServerToClientEvents {
-  "room:list-updated": (rooms: { id: string; name: string; listenerCount: number }[]) => void;
-  "chat:new": (message: ChatMessage) => void;
-  "question:updated": (question: Question) => void;
-  "question:displayed": (question: Question | null) => void;
-  "room:presence": (payload: { listenerCount: number }) => void;
 }

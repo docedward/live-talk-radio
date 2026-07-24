@@ -2,46 +2,41 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getSocket } from "@/lib/socket-client";
-
-type PublicRoom = { id: string; name: string; listenerCount: number };
+import { fetchRooms, pingHealth, type PublicRoom } from "@/lib/api";
 
 /**
- * Live list of open rooms. Updates when anyone creates a room or joins/leaves.
+ * Open rooms list — uses plain HTTP (works on phones even when Socket.io cannot).
  */
 export function RoomList() {
   const [rooms, setRooms] = useState<PublicRoom[]>([]);
-  const [connected, setConnected] = useState(false);
+  const [status, setStatus] = useState<"loading" | "online" | "error">(
+    "loading"
+  );
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const socket = getSocket();
+    let cancelled = false;
 
-    function refresh() {
-      socket.emit("room:list", (list) => setRooms(list));
+    async function tick() {
+      try {
+        await pingHealth();
+        const list = await fetchRooms();
+        if (cancelled) return;
+        setRooms(list);
+        setStatus("online");
+        setError(null);
+      } catch (err) {
+        if (cancelled) return;
+        setStatus("error");
+        setError(err instanceof Error ? err.message : "Could not load rooms");
+      }
     }
 
-    function onConnect() {
-      setConnected(true);
-      refresh();
-    }
-
-    function onDisconnect() {
-      setConnected(false);
-    }
-
-    function onListUpdated(list: PublicRoom[]) {
-      setRooms(list);
-    }
-
-    if (socket.connected) onConnect();
-    socket.on("connect", onConnect);
-    socket.on("disconnect", onDisconnect);
-    socket.on("room:list-updated", onListUpdated);
-
+    tick();
+    const id = setInterval(tick, 2500);
     return () => {
-      socket.off("connect", onConnect);
-      socket.off("disconnect", onDisconnect);
-      socket.off("room:list-updated", onListUpdated);
+      cancelled = true;
+      clearInterval(id);
     };
   }, []);
 
@@ -58,14 +53,26 @@ export function RoomList() {
         </div>
         <span
           className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-            connected
+            status === "online"
               ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-              : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+              : status === "error"
+                ? "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"
+                : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
           }`}
         >
-          {connected ? "Live" : "Connecting…"}
+          {status === "online"
+            ? "Online"
+            : status === "error"
+              ? "Offline"
+              : "Checking…"}
         </span>
       </div>
+
+      {error && (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+          {error}
+        </p>
+      )}
 
       {rooms.length === 0 ? (
         <p className="rounded-xl border border-dashed border-zinc-300 px-4 py-8 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">

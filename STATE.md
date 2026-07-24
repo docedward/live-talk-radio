@@ -3,21 +3,21 @@
 _Last updated: 2026-07-23_
 
 ## Goal
-Text-only Live Talk Radio MVP: hosts create rooms, listeners join via link, moderated question queue + live chat in real time.
+Text-only Live Talk Radio MVP: hosts create rooms, listeners join via link, chat + questions + listener-requested On Air, with clear presence.
 
 ## Done
-- Scaffolded Next.js (TypeScript + Tailwind) under `projects/live-talk-radio/`
-- Installed Socket.io (server + client)
-- Added custom server (`server.mjs`) for live multi-person updates
-- Core pages: home (create/list rooms), room lobby (chat + queue)
-- Host vs listener roles, approve/reject/display question flow
-- Local multi-browser test (Safari + Chrome) — passed
-- GitHub public repo: https://github.com/docedward/live-talk-radio
-- Temporary public tunnel (Cloudflare quick tunnel) for phone tests while Mac is on
+- Next.js + custom `server.mjs` under `projects/live-talk-radio/`
+- Phone-safe REST API + short polling (Socket.io optional; tunnel-friendly)
+- Features: create/list rooms, share link, live chat, question approve/reject, On Air *requests* (listener-initiated), presence (“Who’s here”)
+- Fixed React hydration join-gate + run production build for demos (no Next dev error overlay on phones)
+- Tested: multi-browser local; phone via Cloudflare tunnel; daughter as real listener
+- GitHub: https://github.com/docedward/live-talk-radio (push remaining commits as needed)
 
 ## Next
-- Permanent free host on Render (Blueprint from `render.yaml` + GitHub) — needs Dr. Ed account click
-- Polish from real-user feedback
+- Permanent free Node host (Render Blueprint / `render.yaml`) for a stable public URL
+- Polish from further feedback (UI copy, mobile layout, On Air clarity)
+- Keep production mode for any public demo
 
 ## Blockers
-- Pure Vercel serverless is a poor fit for classic Socket.io — prefer Render free Node web service
+- None for local/tunnel demo
+- Pure Vercel serverless still a poor fit for long-lived custom server — use Render (or similar) for always-on

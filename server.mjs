@@ -1,14 +1,8 @@
 /**
- * Custom server: Next.js (the website) + Socket.io (live updates) on one port.
+ * Custom server: Next.js pages + REST API (phone-friendly) + optional Socket.io.
  *
- * Why a custom server?
- * Next.js alone is great for pages. Live multi-person updates need a long-lived
- * connection. Socket.io provides that; this file wires both together.
- *
- * Note for later (deploy): pure Socket.io does not run on Vercel's free
- * serverless model the same way. Local + multi-person testing works great here.
- * When we deploy, we will choose a free host that supports this pattern
- * (or a small adaptation). Step 1 is structure + local-ready code.
+ * Listener choices: ask a question OR request On Air.
+ * Host: moderate questions + approve On Air requests (no host-picked "put on air").
  */
 
 import { createServer } from "http";
@@ -18,18 +12,11 @@ import { Server } from "socket.io";
 import { randomBytes, randomUUID } from "crypto";
 
 const dev = process.env.NODE_ENV !== "production";
-// 0.0.0.0 = accept connections from outside this machine (needed on cloud hosts + same-Wi-Fi phone tests)
 const hostname = process.env.HOSTNAME || "0.0.0.0";
 const port = parseInt(process.env.PORT || "3000", 10);
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
-
-// --- In-memory store (mirrors src/lib/rooms-store.ts logic for the server process) ---
-// Kept here so the .mjs server does not need a TypeScript build step for MVP.
-
-/** @typedef {"host" | "listener"} Role */
-/** @typedef {"pending" | "approved" | "rejected" | "displayed"} QuestionStatus */
 
 const rooms = new Map();
 
@@ -57,8 +44,15 @@ function countListeners(state) {
   return n;
 }
 
+function presenceList(state) {
+  return Array.from(state.members.values()).map((m) => ({
+    displayName: m.displayName,
+    role: m.role,
+  }));
+}
+
 function createRoom(name) {
-  const trimmed = name.trim();
+  const trimmed = String(name || "").trim();
   if (!trimmed) throw new Error("Room name is required");
 
   let id = makeRoomId();
@@ -75,57 +69,74 @@ function createRoom(name) {
     room,
     messages: [],
     questions: [],
-    displayedQuestionId: null,
+    onAirRequests: [],
+    liveOnAirId: null,
     members: new Map(),
   });
 
   return room;
 }
 
-function joinRoom(roomId, socketId, displayName, hostToken) {
+function joinRoom(roomId, memberId, displayName, hostToken) {
   const state = rooms.get(roomId);
   if (!state) throw new Error("Room not found");
 
-  const name = displayName.trim().slice(0, 40) || "Guest";
+  const name = String(displayName || "").trim().slice(0, 40) || "Guest";
   const role =
     hostToken && hostToken === state.room.hostToken ? "host" : "listener";
 
-  state.members.set(socketId, { displayName: name, role });
+  for (const [otherId, other] of rooms.entries()) {
+    if (otherId !== roomId && other.members.has(memberId)) {
+      other.members.delete(memberId);
+    }
+  }
+
+  state.members.set(memberId, {
+    displayName: name,
+    role,
+    lastSeen: Date.now(),
+  });
   return { state, role };
 }
 
-function leaveRoom(socketId) {
-  for (const [roomId, state] of rooms.entries()) {
-    if (state.members.has(socketId)) {
-      state.members.delete(socketId);
-      return roomId;
-    }
-  }
-  return null;
+function touchMember(roomId, memberId) {
+  const state = rooms.get(roomId);
+  const member = state?.members.get(memberId);
+  if (member) member.lastSeen = Date.now();
 }
 
-function requireHost(roomId, socketId) {
+function requireMember(roomId, memberId) {
   const state = rooms.get(roomId);
   if (!state) throw new Error("Room not found");
-  const member = state.members.get(socketId);
-  if (!member || member.role !== "host") {
-    throw new Error("Only the host can do that");
-  }
-  return state;
+  const member = state.members.get(memberId);
+  if (!member) throw new Error("You are not in this room — join first");
+  touchMember(roomId, memberId);
+  return { state, member };
+}
+
+function requireHostMember(roomId, memberId) {
+  const { state, member } = requireMember(roomId, memberId);
+  if (member.role !== "host") throw new Error("Only the host can do that");
+  return { state, member };
 }
 
 function buildSnapshot(roomId, role) {
   const state = rooms.get(roomId);
   if (!state) throw new Error("Room not found");
 
-  const displayed =
-    state.questions.find((q) => q.id === state.displayedQuestionId) ?? null;
+  const liveOnAir =
+    state.onAirRequests.find((r) => r.id === state.liveOnAirId) ?? null;
 
   const questions =
     role === "host"
       ? [...state.questions]
-      : state.questions.filter(
-          (q) => q.status === "approved" || q.status === "displayed"
+      : state.questions.filter((q) => q.status === "approved");
+
+  const onAirRequests =
+    role === "host"
+      ? [...state.onAirRequests]
+      : state.onAirRequests.filter(
+          (r) => r.status === "live" || r.status === "pending"
         );
 
   return {
@@ -137,249 +148,364 @@ function buildSnapshot(roomId, role) {
     role,
     messages: [...state.messages],
     questions,
-    displayedQuestion: displayed,
+    onAirRequests,
+    liveOnAir,
+    presence: presenceList(state),
     listenerCount: countListeners(state),
   };
 }
 
-function broadcastRoomList(io) {
-  io.emit("room:list-updated", listRoomsPublic());
+function addChat(roomId, memberId, text) {
+  const { state, member } = requireMember(roomId, memberId);
+  const cleaned = String(text || "").trim().slice(0, 500);
+  if (!cleaned) throw new Error("Message cannot be empty");
+
+  const message = {
+    id: randomUUID(),
+    roomId,
+    authorName: member.displayName,
+    text: cleaned,
+    createdAt: Date.now(),
+  };
+  state.messages.push(message);
+  if (state.messages.length > 200) state.messages = state.messages.slice(-200);
+  return message;
+}
+
+function addQuestion(roomId, memberId, text) {
+  const { state, member } = requireMember(roomId, memberId);
+  const cleaned = String(text || "").trim().slice(0, 400);
+  if (!cleaned) throw new Error("Question cannot be empty");
+
+  const question = {
+    id: randomUUID(),
+    roomId,
+    authorName: member.displayName,
+    text: cleaned,
+    status: "pending",
+    createdAt: Date.now(),
+  };
+  state.questions.push(question);
+  return question;
+}
+
+function setQuestionStatus(roomId, memberId, questionId, status) {
+  const { state } = requireHostMember(roomId, memberId);
+  const question = state.questions.find((q) => q.id === questionId);
+  if (!question) throw new Error("Question not found");
+  question.status = status;
+  return question;
+}
+
+function addOnAirRequest(roomId, memberId, note) {
+  const { state, member } = requireMember(roomId, memberId);
+  if (member.role === "host") {
+    throw new Error("Host is already on air as moderator");
+  }
+
+  const pendingExists = state.onAirRequests.some(
+    (r) =>
+      r.memberId === memberId &&
+      (r.status === "pending" || r.status === "live")
+  );
+  if (pendingExists) {
+    throw new Error("You already have an On Air request open");
+  }
+
+  const request = {
+    id: randomUUID(),
+    roomId,
+    memberId,
+    authorName: member.displayName,
+    note: String(note || "").trim().slice(0, 200),
+    status: "pending",
+    createdAt: Date.now(),
+  };
+  state.onAirRequests.push(request);
+  return request;
+}
+
+function setOnAirLive(roomId, hostMemberId, requestId) {
+  const { state } = requireHostMember(roomId, hostMemberId);
+  const request = state.onAirRequests.find((r) => r.id === requestId);
+  if (!request) throw new Error("On Air request not found");
+  if (request.status === "rejected" || request.status === "done") {
+    throw new Error("That request is no longer available");
+  }
+
+  for (const r of state.onAirRequests) {
+    if (r.status === "live" && r.id !== requestId) {
+      r.status = "done";
+    }
+  }
+
+  request.status = "live";
+  state.liveOnAirId = request.id;
+  return request;
+}
+
+function rejectOnAir(roomId, hostMemberId, requestId) {
+  const { state } = requireHostMember(roomId, hostMemberId);
+  const request = state.onAirRequests.find((r) => r.id === requestId);
+  if (!request) throw new Error("On Air request not found");
+  if (request.status === "live") {
+    state.liveOnAirId = null;
+  }
+  request.status = "rejected";
+  return request;
+}
+
+function clearOnAir(roomId, hostMemberId) {
+  const { state } = requireHostMember(roomId, hostMemberId);
+  if (state.liveOnAirId) {
+    const current = state.onAirRequests.find((r) => r.id === state.liveOnAirId);
+    if (current && current.status === "live") {
+      current.status = "done";
+    }
+  }
+  state.liveOnAirId = null;
+}
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => {
+      const raw = Buffer.concat(chunks).toString("utf8");
+      if (!raw) return resolve({});
+      try {
+        resolve(JSON.parse(raw));
+      } catch {
+        reject(new Error("Invalid JSON body"));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+function sendJson(res, status, data) {
+  const body = JSON.stringify(data);
+  res.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type, X-Session-Id",
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  });
+  res.end(body);
+}
+
+function sessionIdFrom(req, body) {
+  const header = req.headers["x-session-id"];
+  if (typeof header === "string" && header.trim()) return header.trim();
+  if (body?.sessionId) return String(body.sessionId);
+  return randomUUID();
+}
+
+/** Public snapshot fields for API — strip internal memberId from on-air requests */
+function publicRequest(r) {
+  return {
+    id: r.id,
+    roomId: r.roomId,
+    authorName: r.authorName,
+    note: r.note,
+    status: r.status,
+    createdAt: r.createdAt,
+  };
+}
+
+function publicSnapshot(roomId, role) {
+  const snap = buildSnapshot(roomId, role);
+  return {
+    ...snap,
+    onAirRequests: snap.onAirRequests.map(publicRequest),
+    liveOnAir: snap.liveOnAir ? publicRequest(snap.liveOnAir) : null,
+  };
+}
+
+/** @returns {Promise<boolean>} true if handled */
+async function handleApi(req, res, pathname, query) {
+  if (req.method === "OPTIONS" && pathname.startsWith("/api/")) {
+    sendJson(res, 204, {});
+    return true;
+  }
+
+  if (!pathname.startsWith("/api/")) return false;
+
+  try {
+    if (pathname === "/api/health" && req.method === "GET") {
+      sendJson(res, 200, { ok: true });
+      return true;
+    }
+
+    if (pathname === "/api/rooms" && req.method === "GET") {
+      sendJson(res, 200, listRoomsPublic());
+      return true;
+    }
+
+    if (pathname === "/api/rooms" && req.method === "POST") {
+      const body = await readBody(req);
+      const room = createRoom(body.name);
+      sendJson(res, 200, {
+        ok: true,
+        roomId: room.id,
+        hostToken: room.hostToken,
+      });
+      return true;
+    }
+
+    const joinMatch = pathname.match(/^\/api\/rooms\/([^/]+)\/join$/);
+    if (joinMatch && req.method === "POST") {
+      const roomId = decodeURIComponent(joinMatch[1]);
+      const body = await readBody(req);
+      const memberId = sessionIdFrom(req, body);
+      const { role } = joinRoom(
+        roomId,
+        memberId,
+        body.displayName,
+        body.hostToken
+      );
+      sendJson(res, 200, {
+        ok: true,
+        snapshot: publicSnapshot(roomId, role),
+        sessionId: memberId,
+      });
+      return true;
+    }
+
+    const roomGet = pathname.match(/^\/api\/rooms\/([^/]+)$/);
+    if (roomGet && req.method === "GET") {
+      const roomId = decodeURIComponent(roomGet[1]);
+      const memberId = sessionIdFrom(req, query);
+      const state = rooms.get(roomId);
+      if (!state) throw new Error("Room not found");
+      const member = state.members.get(memberId);
+      if (!member) throw new Error("You are not in this room — join first");
+      touchMember(roomId, memberId);
+      sendJson(res, 200, {
+        ok: true,
+        snapshot: publicSnapshot(roomId, member.role),
+      });
+      return true;
+    }
+
+    const chatMatch = pathname.match(/^\/api\/rooms\/([^/]+)\/chat$/);
+    if (chatMatch && req.method === "POST") {
+      const roomId = decodeURIComponent(chatMatch[1]);
+      const body = await readBody(req);
+      const memberId = sessionIdFrom(req, body);
+      const message = addChat(roomId, memberId, body.text);
+      sendJson(res, 200, { ok: true, message });
+      return true;
+    }
+
+    const qSubmit = pathname.match(/^\/api\/rooms\/([^/]+)\/questions$/);
+    if (qSubmit && req.method === "POST") {
+      const roomId = decodeURIComponent(qSubmit[1]);
+      const body = await readBody(req);
+      const memberId = sessionIdFrom(req, body);
+      const question = addQuestion(roomId, memberId, body.text);
+      sendJson(res, 200, { ok: true, question });
+      return true;
+    }
+
+    const qAction = pathname.match(
+      /^\/api\/rooms\/([^/]+)\/questions\/([^/]+)\/(approve|reject)$/
+    );
+    if (qAction && req.method === "POST") {
+      const roomId = decodeURIComponent(qAction[1]);
+      const questionId = decodeURIComponent(qAction[2]);
+      const action = qAction[3];
+      const body = await readBody(req);
+      const memberId = sessionIdFrom(req, body);
+      const question = setQuestionStatus(
+        roomId,
+        memberId,
+        questionId,
+        action === "approve" ? "approved" : "rejected"
+      );
+      sendJson(res, 200, { ok: true, question });
+      return true;
+    }
+
+    // POST /api/rooms/:id/on-air  — listener requests on air
+    const onAirSubmit = pathname.match(/^\/api\/rooms\/([^/]+)\/on-air$/);
+    if (onAirSubmit && req.method === "POST") {
+      const roomId = decodeURIComponent(onAirSubmit[1]);
+      const body = await readBody(req);
+      const memberId = sessionIdFrom(req, body);
+      const request = addOnAirRequest(roomId, memberId, body.note);
+      sendJson(res, 200, { ok: true, request: publicRequest(request) });
+      return true;
+    }
+
+    // POST /api/rooms/:id/on-air/clear
+    const onAirClear = pathname.match(/^\/api\/rooms\/([^/]+)\/on-air\/clear$/);
+    if (onAirClear && req.method === "POST") {
+      const roomId = decodeURIComponent(onAirClear[1]);
+      const body = await readBody(req);
+      const memberId = sessionIdFrom(req, body);
+      clearOnAir(roomId, memberId);
+      sendJson(res, 200, { ok: true });
+      return true;
+    }
+
+    // POST /api/rooms/:id/on-air/:requestId/live|reject
+    const onAirAction = pathname.match(
+      /^\/api\/rooms\/([^/]+)\/on-air\/([^/]+)\/(live|reject)$/
+    );
+    if (onAirAction && req.method === "POST") {
+      const roomId = decodeURIComponent(onAirAction[1]);
+      const requestId = decodeURIComponent(onAirAction[2]);
+      const action = onAirAction[3];
+      const body = await readBody(req);
+      const memberId = sessionIdFrom(req, body);
+      const request =
+        action === "live"
+          ? setOnAirLive(roomId, memberId, requestId)
+          : rejectOnAir(roomId, memberId, requestId);
+      sendJson(res, 200, { ok: true, request: publicRequest(request) });
+      return true;
+    }
+
+    sendJson(res, 404, { error: "API route not found" });
+    return true;
+  } catch (err) {
+    sendJson(res, 400, { error: err.message || "Request failed" });
+    return true;
+  }
 }
 
 // --- Boot ---
 
 app.prepare().then(() => {
-  const httpServer = createServer((req, res) => {
-    const parsedUrl = parse(req.url, true);
+  const httpServer = createServer(async (req, res) => {
+    const parsedUrl = parse(req.url || "/", true);
+    const pathname = parsedUrl.pathname || "/";
+
+    try {
+      const handled = await handleApi(req, res, pathname, parsedUrl.query || {});
+      if (handled) return;
+    } catch (err) {
+      sendJson(res, 500, { error: err.message || "Server error" });
+      return;
+    }
+
     handle(req, res, parsedUrl);
   });
 
+  // Socket.io kept optional for desktop; phones use REST polling.
   const io = new Server(httpServer, {
     path: "/socket.io",
     cors: { origin: "*" },
+    transports: ["polling", "websocket"],
   });
-
-  io.on("connection", (socket) => {
-    socket.on("room:list", (ack) => {
-      if (typeof ack === "function") ack(listRoomsPublic());
-    });
-
-    socket.on("room:create", (payload, ack) => {
-      try {
-        const room = createRoom(payload?.name || "");
-        broadcastRoomList(io);
-        if (typeof ack === "function") {
-          ack({ ok: true, roomId: room.id, hostToken: room.hostToken });
-        }
-      } catch (err) {
-        if (typeof ack === "function") {
-          ack({ ok: false, error: err.message || "Could not create room" });
-        }
-      }
-    });
-
-    socket.on("room:join", (payload, ack) => {
-      try {
-        const roomId = payload?.roomId;
-        const displayName = payload?.displayName || "Guest";
-        const hostToken = payload?.hostToken;
-
-        // Leave any previous room first
-        const previous = leaveRoom(socket.id);
-        if (previous) {
-          socket.leave(previous);
-          io.to(previous).emit("room:presence", {
-            listenerCount: countListeners(rooms.get(previous)),
-          });
-          broadcastRoomList(io);
-        }
-
-        const { role } = joinRoom(roomId, socket.id, displayName, hostToken);
-        socket.join(roomId);
-
-        io.to(roomId).emit("room:presence", {
-          listenerCount: countListeners(rooms.get(roomId)),
-        });
-        broadcastRoomList(io);
-
-        if (typeof ack === "function") {
-          ack({ ok: true, snapshot: buildSnapshot(roomId, role) });
-        }
-      } catch (err) {
-        if (typeof ack === "function") {
-          ack({ ok: false, error: err.message || "Could not join room" });
-        }
-      }
-    });
-
-    socket.on("chat:send", (payload, ack) => {
-      try {
-        const roomId = payload?.roomId;
-        const state = rooms.get(roomId);
-        if (!state) throw new Error("Room not found");
-        const member = state.members.get(socket.id);
-        if (!member) throw new Error("You are not in this room");
-
-        const cleaned = String(payload?.text || "").trim().slice(0, 500);
-        if (!cleaned) throw new Error("Message cannot be empty");
-
-        const message = {
-          id: randomUUID(),
-          roomId,
-          authorName: member.displayName,
-          text: cleaned,
-          createdAt: Date.now(),
-        };
-        state.messages.push(message);
-        if (state.messages.length > 200) {
-          state.messages = state.messages.slice(-200);
-        }
-
-        io.to(roomId).emit("chat:new", message);
-        if (typeof ack === "function") ack({ ok: true });
-      } catch (err) {
-        if (typeof ack === "function") {
-          ack({ ok: false, error: err.message || "Could not send message" });
-        }
-      }
-    });
-
-    socket.on("question:submit", (payload, ack) => {
-      try {
-        const roomId = payload?.roomId;
-        const state = rooms.get(roomId);
-        if (!state) throw new Error("Room not found");
-        const member = state.members.get(socket.id);
-        if (!member) throw new Error("You are not in this room");
-
-        const cleaned = String(payload?.text || "").trim().slice(0, 400);
-        if (!cleaned) throw new Error("Question cannot be empty");
-
-        const question = {
-          id: randomUUID(),
-          roomId,
-          authorName: member.displayName,
-          text: cleaned,
-          status: "pending",
-          createdAt: Date.now(),
-        };
-        state.questions.push(question);
-
-        // Hosts always get the full queue update; listeners get approved/displayed only.
-        // For simplicity: emit full question to room; client filters by role.
-        io.to(roomId).emit("question:updated", question);
-        if (typeof ack === "function") ack({ ok: true, question });
-      } catch (err) {
-        if (typeof ack === "function") {
-          ack({ ok: false, error: err.message || "Could not submit question" });
-        }
-      }
-    });
-
-    socket.on("question:approve", (payload, ack) => {
-      try {
-        const roomId = payload?.roomId;
-        const state = requireHost(roomId, socket.id);
-        const question = state.questions.find((q) => q.id === payload?.questionId);
-        if (!question) throw new Error("Question not found");
-        if (question.status === "displayed") {
-          throw new Error("That question is currently on display");
-        }
-        question.status = "approved";
-        io.to(roomId).emit("question:updated", question);
-        if (typeof ack === "function") ack({ ok: true });
-      } catch (err) {
-        if (typeof ack === "function") {
-          ack({ ok: false, error: err.message || "Could not approve" });
-        }
-      }
-    });
-
-    socket.on("question:reject", (payload, ack) => {
-      try {
-        const roomId = payload?.roomId;
-        const state = requireHost(roomId, socket.id);
-        const question = state.questions.find((q) => q.id === payload?.questionId);
-        if (!question) throw new Error("Question not found");
-        if (question.status === "displayed") {
-          throw new Error("That question is currently on display");
-        }
-        question.status = "rejected";
-        io.to(roomId).emit("question:updated", question);
-        if (typeof ack === "function") ack({ ok: true });
-      } catch (err) {
-        if (typeof ack === "function") {
-          ack({ ok: false, error: err.message || "Could not reject" });
-        }
-      }
-    });
-
-    socket.on("question:display", (payload, ack) => {
-      try {
-        const roomId = payload?.roomId;
-        const state = requireHost(roomId, socket.id);
-        const question = state.questions.find((q) => q.id === payload?.questionId);
-        if (!question) throw new Error("Question not found");
-        if (question.status === "rejected") {
-          throw new Error("Cannot display a rejected question");
-        }
-
-        for (const q of state.questions) {
-          if (q.status === "displayed" && q.id !== question.id) {
-            q.status = "approved";
-            io.to(roomId).emit("question:updated", q);
-          }
-        }
-
-        question.status = "displayed";
-        state.displayedQuestionId = question.id;
-        io.to(roomId).emit("question:updated", question);
-        io.to(roomId).emit("question:displayed", question);
-        if (typeof ack === "function") ack({ ok: true });
-      } catch (err) {
-        if (typeof ack === "function") {
-          ack({ ok: false, error: err.message || "Could not display question" });
-        }
-      }
-    });
-
-    socket.on("question:clear-display", (payload, ack) => {
-      try {
-        const roomId = payload?.roomId;
-        const state = requireHost(roomId, socket.id);
-        if (state.displayedQuestionId) {
-          const current = state.questions.find(
-            (q) => q.id === state.displayedQuestionId
-          );
-          if (current && current.status === "displayed") {
-            current.status = "approved";
-            io.to(roomId).emit("question:updated", current);
-          }
-        }
-        state.displayedQuestionId = null;
-        io.to(roomId).emit("question:displayed", null);
-        if (typeof ack === "function") ack({ ok: true });
-      } catch (err) {
-        if (typeof ack === "function") {
-          ack({ ok: false, error: err.message || "Could not clear display" });
-        }
-      }
-    });
-
-    socket.on("disconnect", () => {
-      const roomId = leaveRoom(socket.id);
-      if (roomId && rooms.has(roomId)) {
-        io.to(roomId).emit("room:presence", {
-          listenerCount: countListeners(rooms.get(roomId)),
-        });
-        broadcastRoomList(io);
-      }
-    });
-  });
+  void io;
 
   httpServer.listen(port, hostname, () => {
     console.log(
       `> Live Talk Radio ready on http://${hostname}:${port} (${dev ? "dev" : "prod"})`
     );
+    console.log("> REST: questions + On Air requests + presence");
   });
 });

@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { getSocket } from "@/lib/socket-client";
+import { createRoom } from "@/lib/api";
 
 /**
- * Host form: name the room, create it, save the secret host token, open the room.
+ * Host form: name the room, create it via HTTP, open the room.
  */
 export function CreateRoomForm() {
   const router = useRouter();
@@ -20,44 +20,19 @@ export function CreateRoomForm() {
     setBusy(true);
 
     try {
-      const socket = getSocket();
-      if (!socket.connected) {
-        await new Promise<void>((resolve, reject) => {
-          const t = setTimeout(() => reject(new Error("Could not connect to live server")), 8000);
-          socket.once("connect", () => {
-            clearTimeout(t);
-            resolve();
-          });
-          socket.connect();
-        });
-      }
-
-      socket.emit(
-        "room:create",
-        { name: roomName, hostName: hostName || "Host" },
-        (result) => {
-          setBusy(false);
-          if (!result.ok) {
-            setError(result.error);
-            return;
-          }
-
-          // Remember host credentials in this browser only
-          const key = `ltr-host-${result.roomId}`;
-          localStorage.setItem(
-            key,
-            JSON.stringify({
-              hostToken: result.hostToken,
-              displayName: hostName.trim() || "Host",
-            })
-          );
-
-          router.push(`/room/${result.roomId}`);
-        }
+      const result = await createRoom(roomName, hostName || "Host");
+      localStorage.setItem(
+        `ltr-host-${result.roomId}`,
+        JSON.stringify({
+          hostToken: result.hostToken,
+          displayName: hostName.trim() || "Host",
+        })
       );
+      router.push(`/room/${result.roomId}`);
     } catch (err) {
-      setBusy(false);
       setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setBusy(false);
     }
   }
 

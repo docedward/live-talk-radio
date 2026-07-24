@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage } from "@/lib/types";
-import { getSocket } from "@/lib/socket-client";
+import { fetchSnapshot, sendChat } from "@/lib/api";
 
 type Props = {
   roomId: string;
@@ -13,6 +13,7 @@ export function ChatPanel({ roomId, initialMessages }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -20,16 +21,19 @@ export function ChatPanel({ roomId, initialMessages }: Props) {
   }, [initialMessages]);
 
   useEffect(() => {
-    const socket = getSocket();
-
-    function onNew(message: ChatMessage) {
-      if (message.roomId !== roomId) return;
-      setMessages((prev) => [...prev, message]);
+    let cancelled = false;
+    async function poll() {
+      try {
+        const result = await fetchSnapshot(roomId);
+        if (!cancelled) setMessages(result.snapshot.messages);
+      } catch {
+        /* parent poll may handle */
+      }
     }
-
-    socket.on("chat:new", onNew);
+    const id = setInterval(poll, 2000);
     return () => {
-      socket.off("chat:new", onNew);
+      cancelled = true;
+      clearInterval(id);
     };
   }, [roomId]);
 
@@ -37,17 +41,22 @@ export function ChatPanel({ roomId, initialMessages }: Props) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  function send(e: React.FormEvent) {
+  async function send(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const socket = getSocket();
-    socket.emit("chat:send", { roomId, text }, (result) => {
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
+    setSending(true);
+    try {
+      const result = await sendChat(roomId, text);
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === result.message.id)) return prev;
+        return [...prev, result.message];
+      });
       setText("");
-    });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send");
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
@@ -95,7 +104,7 @@ export function ChatPanel({ roomId, initialMessages }: Props) {
         />
         <button
           type="submit"
-          disabled={!text.trim()}
+          disabled={!text.trim() || sending}
           className="rounded-xl bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
         >
           Send

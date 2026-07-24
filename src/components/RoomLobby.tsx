@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { RoomSnapshot } from "@/lib/types";
-import { getSocket } from "@/lib/socket-client";
+import { fetchSnapshot, joinRoom } from "@/lib/api";
 import { ChatPanel } from "./ChatPanel";
 import { QuestionQueue } from "./QuestionQueue";
+import { PresencePanel } from "./PresencePanel";
 
 type Props = {
   roomId: string;
@@ -17,7 +18,6 @@ type HostCreds = {
 };
 
 function loadHostCreds(roomId: string): HostCreds | null {
-  if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(`ltr-host-${roomId}`);
     if (!raw) return null;
@@ -28,71 +28,68 @@ function loadHostCreds(roomId: string): HostCreds | null {
 }
 
 /**
- * Join gate + live room. Hosts who created the room on this browser
- * auto-enter with host powers; everyone else picks a display name.
+ * Join gate + room.
+ * Host creds are read only after mount so server HTML matches the first client paint
+ * (avoids the scary Next.js hydration error overlay on phones).
  */
 export function RoomLobby({ roomId }: Props) {
-  const hostCreds = useMemo(() => loadHostCreds(roomId), [roomId]);
-  const [displayName, setDisplayName] = useState(hostCreds?.displayName || "");
+  const [displayName, setDisplayName] = useState("");
+  const [hostCreds, setHostCreds] = useState<HostCreds | null>(null);
+  const [booted, setBooted] = useState(false);
   const [snapshot, setSnapshot] = useState<RoomSnapshot | null>(null);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shareNote, setShareNote] = useState<string | null>(null);
-  const [listenerCount, setListenerCount] = useState(0);
 
-  // Auto-join for returning hosts
+  // Client-only boot: localStorage is never read during SSR
   useEffect(() => {
-    if (!hostCreds) return;
-    if (snapshot) return;
-    join(hostCreds.displayName, hostCreds.hostToken);
+    const creds = loadHostCreds(roomId);
+    setHostCreds(creds);
+    if (creds?.displayName) {
+      setDisplayName(creds.displayName);
+    }
+    setBooted(true);
+  }, [roomId]);
+
+  // Auto-join hosts after boot
+  useEffect(() => {
+    if (!booted || !hostCreds || snapshot) return;
+    void join(hostCreds.displayName, hostCreds.hostToken);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hostCreds]);
+  }, [booted, hostCreds]);
 
   useEffect(() => {
     if (!snapshot) return;
-    const socket = getSocket();
-    function onPresence(payload: { listenerCount: number }) {
-      setListenerCount(payload.listenerCount);
-    }
-    socket.on("room:presence", onPresence);
-    return () => {
-      socket.off("room:presence", onPresence);
-    };
-  }, [snapshot]);
+    let cancelled = false;
 
-  function join(name: string, hostToken?: string) {
+    async function poll() {
+      try {
+        const result = await fetchSnapshot(roomId);
+        if (cancelled) return;
+        setSnapshot(result.snapshot);
+      } catch {
+        /* keep last good snapshot */
+      }
+    }
+
+    const id = setInterval(poll, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [snapshot, roomId]);
+
+  async function join(name: string, hostToken?: string) {
     setError(null);
     setJoining(true);
-    const socket = getSocket();
 
-    const doJoin = () => {
-      socket.emit(
-        "room:join",
-        { roomId, displayName: name, hostToken },
-        (result) => {
-          setJoining(false);
-          if (!result.ok) {
-            setError(result.error);
-            return;
-          }
-          setSnapshot(result.snapshot);
-          setListenerCount(result.snapshot.listenerCount);
-        }
-      );
-    };
-
-    if (socket.connected) {
-      doJoin();
-    } else {
-      const t = setTimeout(() => {
-        setJoining(false);
-        setError("Could not connect to the live server");
-      }, 8000);
-      socket.once("connect", () => {
-        clearTimeout(t);
-        doJoin();
-      });
-      socket.connect();
+    try {
+      const result = await joinRoom(roomId, name, hostToken);
+      setSnapshot(result.snapshot);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not join room");
+    } finally {
+      setJoining(false);
     }
   }
 
@@ -106,6 +103,7 @@ export function RoomLobby({ roomId }: Props) {
     }
   }
 
+  // Same join UI on server + first client paint (empty name until boot finishes)
   if (!snapshot) {
     return (
       <div className="mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-16">
@@ -131,6 +129,7 @@ export function RoomLobby({ roomId }: Props) {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="e.g. Alex"
+              autoComplete="nickname"
               className="rounded-xl border border-zinc-300 bg-white px-3 py-2 outline-none ring-violet-500 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
               maxLength={40}
             />
@@ -144,11 +143,11 @@ export function RoomLobby({ roomId }: Props) {
 
           <button
             type="button"
-            disabled={joining || !displayName.trim()}
+            disabled={joining || !booted || !displayName.trim()}
             onClick={() => join(displayName.trim())}
             className="mt-4 w-full rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-50"
           >
-            {joining ? "Joining…" : "Enter room"}
+            {joining || (booted && hostCreds) ? "Joining…" : "Enter room"}
           </button>
         </div>
       </div>
@@ -156,6 +155,10 @@ export function RoomLobby({ roomId }: Props) {
   }
 
   const isHost = snapshot.role === "host";
+  const iAmLive =
+    !isHost &&
+    !!snapshot.liveOnAir &&
+    snapshot.liveOnAir.authorName === displayName;
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-8">
@@ -181,8 +184,7 @@ export function RoomLobby({ roomId }: Props) {
             >
               {isHost ? "host" : "listener"}
             </span>
-            {" · "}
-            {listenerCount} listener{listenerCount === 1 ? "" : "s"}
+            {displayName ? ` · ${displayName}` : ""}
           </p>
         </div>
 
@@ -204,10 +206,21 @@ export function RoomLobby({ roomId }: Props) {
 
       {isHost && (
         <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900 dark:border-violet-900 dark:bg-violet-950/50 dark:text-violet-100">
-          <strong>Host controls are on.</strong> You can approve, reject, and
-          put questions on air. Share the link above — guests join as listeners.
+          <strong>Host controls are on.</strong> Approve or reject questions.
+          On Air only happens when a listener requests it and you put them on.
         </div>
       )}
+
+      {iAmLive && (
+        <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-100">
+          You are On Air right now — the host and room can see you featured.
+        </div>
+      )}
+
+      <PresencePanel
+        presence={snapshot.presence}
+        listenerCount={snapshot.listenerCount}
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <ChatPanel roomId={roomId} initialMessages={snapshot.messages} />
@@ -215,7 +228,8 @@ export function RoomLobby({ roomId }: Props) {
           roomId={roomId}
           role={snapshot.role}
           initialQuestions={snapshot.questions}
-          initialDisplayed={snapshot.displayedQuestion}
+          initialOnAirRequests={snapshot.onAirRequests}
+          initialLiveOnAir={snapshot.liveOnAir}
         />
       </div>
     </div>
