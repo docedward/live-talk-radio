@@ -76,7 +76,13 @@ export type RoomSfxId =
   | "pew"
   | "laugh"
   | "applause"
-  | "ohh";
+  | "ohh"
+  | "rimshot"
+  | "boo"
+  | "airhorn"
+  | "buzzer"
+  | "ding"
+  | "crickets";
 
 export interface RoomSfxEvent {
   id: string;

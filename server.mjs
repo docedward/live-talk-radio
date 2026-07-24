@@ -345,6 +345,12 @@ const HOST_SFX_IDS = new Set([
   "laugh",
   "applause",
   "ohh",
+  "rimshot",
+  "boo",
+  "airhorn",
+  "buzzer",
+  "ding",
+  "crickets",
 ]);
 
 function triggerSfx(roomId, hostMemberId, sound) {

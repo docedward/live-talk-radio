@@ -11,7 +11,13 @@ export type HostSfxId =
   | "pew"
   | "laugh"
   | "applause"
-  | "ohh";
+  | "ohh"
+  | "rimshot"
+  | "boo"
+  | "airhorn"
+  | "buzzer"
+  | "ding"
+  | "crickets";
 
 export type HostSfxButton = {
   id: HostSfxId;
@@ -23,12 +29,18 @@ export type HostSfxButton = {
 
 /** Registry = what the host UI shows. Order = button order. */
 export const HOST_SFX_BUTTONS: HostSfxButton[] = [
-  { id: "cry", label: "Baby cry", emoji: "👶" },
-  { id: "drumroll", label: "Drum roll", emoji: "🥁" },
-  { id: "pew", label: "Pew-pew", emoji: "🔫" },
+  { id: "cry", label: "Cry", emoji: "👶" },
+  { id: "drumroll", label: "Roll", emoji: "🥁" },
+  { id: "pew", label: "Pew", emoji: "🔫" },
   { id: "laugh", label: "Laugh", emoji: "😂" },
-  { id: "applause", label: "Applause", emoji: "👏" },
-  { id: "ohh", label: "Crowd ohh", emoji: "😮" },
+  { id: "applause", label: "Clap", emoji: "👏" },
+  { id: "ohh", label: "Ohh", emoji: "😮" },
+  { id: "rimshot", label: "Rimshot", emoji: "🥁" },
+  { id: "boo", label: "Boo", emoji: "👎" },
+  { id: "airhorn", label: "Horn", emoji: "📢" },
+  { id: "buzzer", label: "Wrong", emoji: "❌" },
+  { id: "ding", label: "Ding", emoji: "🔔" },
+  { id: "crickets", label: "Crickets", emoji: "🦗" },
 ];
 
 let ctx: AudioContext | null = null;
@@ -88,7 +100,6 @@ function tone(
 
 function playCry(c: AudioContext) {
   const t0 = c.currentTime;
-  // Wobbly high tones ~1.5s
   for (let i = 0; i < 6; i++) {
     const t = t0 + i * 0.22;
     const o = c.createOscillator();
@@ -126,7 +137,6 @@ function playDrumroll(c: AudioContext) {
     src.start(t);
     src.stop(t + 0.04);
   }
-  // Final hit
   const hit = t0 + 1.3;
   tone(c, 80, hit, 0.25, "sine", 0.4);
   const src = c.createBufferSource();
@@ -203,7 +213,6 @@ function playApplause(c: AudioContext) {
 
 function playOhh(c: AudioContext) {
   const t0 = c.currentTime;
-  // Crowd “ohhh” — several falling voices
   for (let i = 0; i < 5; i++) {
     const t = t0 + i * 0.05;
     const o = c.createOscillator();
@@ -225,6 +234,173 @@ function playOhh(c: AudioContext) {
   }
 }
 
+/** Ba-dum-tss rimshot */
+function playRimshot(c: AudioContext) {
+  const t0 = c.currentTime;
+  // two soft kicks
+  for (const off of [0, 0.12]) {
+    const t = t0 + off;
+    tone(c, 90, t, 0.08, "sine", 0.35);
+    const src = c.createBufferSource();
+    src.buffer = noise(c, 0.06);
+    const f = c.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = 300;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.2, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+    src.connect(f);
+    f.connect(g);
+    g.connect(c.destination);
+    src.start(t);
+    src.stop(t + 0.06);
+  }
+  // snare/cymbal splash
+  const t = t0 + 0.28;
+  const src = c.createBufferSource();
+  src.buffer = noise(c, 0.35);
+  const f = c.createBiquadFilter();
+  f.type = "highpass";
+  f.frequency.value = 2500;
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.28, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+  src.connect(f);
+  f.connect(g);
+  g.connect(c.destination);
+  src.start(t);
+  src.stop(t + 0.35);
+}
+
+function playBoo(c: AudioContext) {
+  const t0 = c.currentTime;
+  for (let i = 0; i < 6; i++) {
+    const t = t0 + i * 0.04;
+    const o = c.createOscillator();
+    o.type = "sawtooth";
+    o.frequency.setValueAtTime(180 + i * 12, t);
+    o.frequency.linearRampToValueAtTime(95 + i * 8, t + 1.0);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.07, t + 0.1);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.05);
+    const f = c.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = 700;
+    o.connect(f);
+    f.connect(g);
+    g.connect(c.destination);
+    o.start(t);
+    o.stop(t + 1.1);
+  }
+}
+
+function playAirhorn(c: AudioContext) {
+  const t0 = c.currentTime;
+  for (let i = 0; i < 3; i++) {
+    const t = t0 + i * 0.02;
+    const o = c.createOscillator();
+    o.type = "sawtooth";
+    o.frequency.setValueAtTime(370 + i * 5, t);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.14, t + 0.05);
+    g.gain.setValueAtTime(0.12, t + 0.7);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+    const f = c.createBiquadFilter();
+    f.type = "bandpass";
+    f.frequency.value = 500;
+    f.Q.value = 2;
+    o.connect(f);
+    f.connect(g);
+    g.connect(c.destination);
+    o.start(t);
+    o.stop(t + 1.15);
+  }
+  // grit
+  const src = c.createBufferSource();
+  src.buffer = noise(c, 1.1);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.04, t0);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.1);
+  src.connect(g);
+  g.connect(c.destination);
+  src.start(t0);
+  src.stop(t0 + 1.1);
+}
+
+function playBuzzer(c: AudioContext) {
+  const t0 = c.currentTime;
+  const o = c.createOscillator();
+  o.type = "square";
+  o.frequency.setValueAtTime(140, t0);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(0.18, t0 + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.55);
+  o.connect(g);
+  g.connect(c.destination);
+  o.start(t0);
+  o.stop(t0 + 0.58);
+  // harsh overtone
+  const o2 = c.createOscillator();
+  o2.type = "square";
+  o2.frequency.setValueAtTime(280, t0);
+  const g2 = c.createGain();
+  g2.gain.setValueAtTime(0.0001, t0);
+  g2.gain.exponentialRampToValueAtTime(0.08, t0 + 0.02);
+  g2.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.55);
+  o2.connect(g2);
+  g2.connect(c.destination);
+  o2.start(t0);
+  o2.stop(t0 + 0.58);
+}
+
+function playDing(c: AudioContext) {
+  const t0 = c.currentTime;
+  for (const [freq, vol, dur] of [
+    [880, 0.2, 0.9],
+    [1320, 0.1, 0.7],
+    [1760, 0.06, 0.5],
+  ] as const) {
+    const o = c.createOscillator();
+    o.type = "sine";
+    o.frequency.setValueAtTime(freq, t0);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g);
+    g.connect(c.destination);
+    o.start(t0);
+    o.stop(t0 + dur + 0.02);
+  }
+}
+
+function playCrickets(c: AudioContext) {
+  const t0 = c.currentTime;
+  for (let i = 0; i < 14; i++) {
+    const t = t0 + i * 0.14 + Math.random() * 0.04;
+    const o = c.createOscillator();
+    o.type = "square";
+    o.frequency.setValueAtTime(4200 + Math.random() * 800, t);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.04, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+    const f = c.createBiquadFilter();
+    f.type = "bandpass";
+    f.frequency.value = 4500;
+    f.Q.value = 8;
+    o.connect(f);
+    f.connect(g);
+    g.connect(c.destination);
+    o.start(t);
+    o.stop(t + 0.05);
+  }
+}
+
 const PLAYERS: Record<HostSfxId, (c: AudioContext) => void> = {
   cry: playCry,
   drumroll: playDrumroll,
@@ -232,6 +408,12 @@ const PLAYERS: Record<HostSfxId, (c: AudioContext) => void> = {
   laugh: playLaugh,
   applause: playApplause,
   ohh: playOhh,
+  rimshot: playRimshot,
+  boo: playBoo,
+  airhorn: playAirhorn,
+  buzzer: playBuzzer,
+  ding: playDing,
+  crickets: playCrickets,
 };
 
 const bufferCache = new Map<HostSfxId, AudioBuffer | null>();
@@ -290,7 +472,6 @@ export function playHostSfx(id: HostSfxId): void {
     return;
   }
 
-  // Try load then play; synth fallback if missing
   void loadBuffer(c, id).then((buf) => {
     if (buf) {
       playBuffer(c, buf);
