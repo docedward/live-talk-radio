@@ -1,0 +1,14 @@
+# Render Blueprint — free Node web service for Socket.io + Next.js custom server.
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: live-talk-radio
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOSTNAME
+        value: 0.0.0.0
