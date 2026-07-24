@@ -109,6 +109,12 @@ export function QuestionQueue({
         if (!text.trim()) throw new Error("Type a question first");
         await submitQuestion(roomId, text);
       } else {
+        if (iAmOnPanel) {
+          throw new Error("You are already live on the panel");
+        }
+        if (iAmPendingOnAir) {
+          throw new Error("You already have an On Air request pending");
+        }
         await requestOnAir(roomId, text);
       }
       setText("");
@@ -177,6 +183,9 @@ export function QuestionQueue({
   const panelFull = panelCount >= cap;
   const iAmOnPanel = livePanel.some((r) => r.isMe);
   const iAmHostMuted = livePanel.some((r) => r.isMe && r.hostMuted);
+  const iAmPendingOnAir = onAirRequests.some(
+    (r) => r.isMe && r.status === "pending"
+  );
 
   return (
     <section className="flex min-h-[320px] flex-1 flex-col rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
@@ -365,56 +374,124 @@ export function QuestionQueue({
         )}
       </div>
 
-      {/* Listener (and host can still ask a text question if they want) */}
+      {/* Listener compose — different state if already live / pending */}
       <div className="border-t border-zinc-200 p-3 dark:border-zinc-800">
-        {role === "listener" && (
-          <div className="mb-2 flex gap-2">
-            <ModeBtn
-              active={mode === "question"}
-              onClick={() => setMode("question")}
-              label="Ask a question"
-            />
-            <ModeBtn
-              active={mode === "onair"}
-              onClick={() => setMode("onair")}
-              label="Request On Air"
-            />
+        {role === "listener" && iAmOnPanel && (
+          <div
+            className={`rounded-xl border-2 px-4 py-3 text-center ${
+              iAmHostMuted
+                ? "border-zinc-400 bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-900"
+                : "border-emerald-500 bg-emerald-50 dark:border-emerald-400 dark:bg-emerald-950/50"
+            }`}
+          >
+            <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+              {iAmHostMuted ? "You are on the panel (muted)" : "You are live"}
+            </p>
+            <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+              {iAmHostMuted
+                ? "The host muted your mic. You stay on air until they unmute or remove you."
+                : "You are on the speaker panel. Use Live voice above for mute. Host can remove you anytime."}
+            </p>
           </div>
         )}
 
-        <form onSubmit={submit} className="flex gap-2">
-          <input
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={
-              role === "listener" && mode === "onair"
-                ? "Optional note (topic)…"
-                : "Type your question…"
-            }
-            maxLength={role === "listener" && mode === "onair" ? 200 : 400}
-            className="min-w-0 flex-1 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none ring-violet-500 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-          />
-          <button
-            type="submit"
-            disabled={
-              busy ||
-              (mode === "question" && !text.trim() && role !== "host") ||
-              (role === "host" && !text.trim())
-            }
-            className="rounded-xl bg-violet-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
-          >
-            {role === "listener" && mode === "onair" ? "Request" : "Ask"}
-          </button>
-        </form>
-        {role === "listener" && mode === "onair" && (
-          <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-            Note is optional. Host must approve before you go On Air.
-          </p>
+        {role === "listener" && !iAmOnPanel && iAmPendingOnAir && (
+          <div className="rounded-xl border-2 border-amber-400 bg-amber-50 px-4 py-3 text-center dark:border-amber-600 dark:bg-amber-950/40">
+            <p className="text-sm font-semibold text-amber-950 dark:text-amber-100">
+              On Air request pending
+            </p>
+            <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-200/80">
+              Waiting for the host to add you to the panel. You can still ask a
+              text question below.
+            </p>
+          </div>
         )}
+
+        {role === "listener" && !iAmOnPanel && (
+          <div className={iAmPendingOnAir ? "mt-3" : ""}>
+            <div className="mb-2 flex gap-2">
+              <ModeBtn
+                active={mode === "question"}
+                onClick={() => setMode("question")}
+                label="Ask a question"
+              />
+              {!iAmPendingOnAir && (
+                <ModeBtn
+                  active={mode === "onair"}
+                  onClick={() => setMode("onair")}
+                  label="Request On Air"
+                />
+              )}
+            </div>
+
+            {/* While pending, only allow questions — not another On Air request */}
+            {(mode === "question" || iAmPendingOnAir) && (
+              <form onSubmit={submit} className="flex gap-2">
+                <input
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder="Type your question…"
+                  maxLength={400}
+                  className="min-w-0 flex-1 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none ring-violet-500 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                />
+                <button
+                  type="submit"
+                  disabled={busy || !text.trim()}
+                  className="rounded-xl bg-violet-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
+                >
+                  Ask
+                </button>
+              </form>
+            )}
+
+            {!iAmPendingOnAir && mode === "onair" && (
+              <>
+                <form onSubmit={submit} className="flex gap-2">
+                  <input
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    placeholder="Optional note (topic)…"
+                    maxLength={200}
+                    className="min-w-0 flex-1 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none ring-violet-500 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                  />
+                  <button
+                    type="submit"
+                    disabled={busy}
+                    className="rounded-xl bg-violet-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
+                  >
+                    Request
+                  </button>
+                </form>
+                <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+                  Note is optional. Host must approve before you go On Air.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
         {role === "host" && (
-          <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-            As host you can still type a question into the queue for notes.
-          </p>
+          <>
+            <form onSubmit={submit} className="flex gap-2">
+              <input
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Type a question into the queue for notes…"
+                maxLength={400}
+                className="min-w-0 flex-1 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none ring-violet-500 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+              />
+              <button
+                type="submit"
+                disabled={busy || !text.trim()}
+                className="rounded-xl bg-violet-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
+              >
+                Ask
+              </button>
+            </form>
+            <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+              As host you can still type a question into the queue for notes.
+            </p>
+          </>
         )}
       </div>
       {error && (
