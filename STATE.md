@@ -3,21 +3,29 @@
 _Last updated: 2026-07-23_
 
 ## Goal
-Text-only Live Talk Radio MVP: hosts create rooms, listeners join via link, chat + questions + listener-requested On Air, with clear presence.
+Live Talk Radio: text rooms with moderated questions **and** live 2-person voice (host always; one listener only when host puts them On Air; others hear).
 
 ## Done
-- Next.js + custom `server.mjs` under `projects/live-talk-radio/`
-- Phone-safe REST API + short polling (Socket.io optional; tunnel-friendly)
-- Features: create/list rooms, share link, live chat, question approve/reject, On Air *requests* (listener-initiated), presence (“Who’s here”)
-- Fixed React hydration join-gate + run production build for demos (no Next dev error overlay on phones)
-- Tested: multi-browser local; phone via Cloudflare tunnel; daughter as real listener
-- GitHub: https://github.com/docedward/live-talk-radio (push remaining commits as needed)
+- Scaffolded Next.js (TypeScript + Tailwind) under `projects/live-talk-radio/`
+- Installed Socket.io (server + client) — currently unused for room fan-out; REST polling is primary
+- Custom server (`server.mjs`): rooms, chat, question queue, **On Air request state machine** (text/status only)
+- Core pages: home (create/list rooms), room lobby (chat + queue + presence)
+- Host vs listener roles; approve/reject questions; listener request On Air → host live/clear
+- Local multi-browser test (Safari + Chrome) — text path passed
+- GitHub public repo: https://github.com/docedward/live-talk-radio
+- Temporary public tunnel (Cloudflare) for phone tests while Mac is on
+- Council of 5 review → voice path (LiveKit Cloud + VoiceStage); verdict in GrokBox outputs
 
 ## Next
-- Permanent free Node host (Render Blueprint / `render.yaml`) for a stable public URL
-- Polish from further feedback (UI copy, mobile layout, On Air clarity)
-- Keep production mode for any public demo
+- **Voice MVP (Council verdict):** LiveKit Cloud tokens from `server.mjs` + `VoiceStage` driven by On Air
+  - Phase 0: LiveKit env + graceful disable
+  - Phase 1: `POST .../voice-token` + snapshot `voice.canPublish`
+  - Phase 2: host publish, all subscribe
+  - Phase 3: guest publish only while On Air live; clear revokes
+  - Phase 4: phone listen + permission UX honesty
+  - Phase 5: Render secrets when ready for stable HTTPS
+- Permanent free host on Render (Blueprint from `render.yaml` + GitHub) — needs Dr. Ed account click + LiveKit secrets
 
 ## Blockers
-- None for local/tunnel demo
-- Pure Vercel serverless still a poor fit for long-lived custom server — use Render (or similar) for always-on
+- LiveKit Cloud project + API keys (Dr. Ed signup) before Phase 1 can run against real media
+- Pure Vercel serverless is a poor fit for classic Socket.io / long-lived Node — prefer Render free Node web service
