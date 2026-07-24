@@ -1,7 +1,9 @@
 # Render Blueprint — FREE web service only ($0).
-# No secret prompts on create (LiveKit can be added later in the dashboard).
 #
-# https://render.com/docs/blueprint-spec
+# Important: do NOT set NODE_ENV=production as a service env var for the build.
+# That makes `npm ci` skip devDependencies (Tailwind/PostCSS) and the Next build fails.
+# startCommand already sets production for the running app.
+#
 # https://render.com/docs/free
 
 services:
@@ -10,11 +12,10 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: npm ci && npm run build
+    # --include=dev: install build tools even if NODE_ENV is production
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
-      - key: NODE_ENV
-        value: production
       - key: HOSTNAME
         value: 0.0.0.0
