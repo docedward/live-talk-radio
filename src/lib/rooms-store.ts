@@ -11,6 +11,7 @@ import type {
   Question,
   Role,
   Room,
+  RoomSfxEvent,
   RoomSnapshot,
 } from "./types";
 
@@ -22,6 +23,7 @@ interface RoomState {
   questions: Question[];
   onAirRequests: (OnAirRequest & { memberId: string })[];
   members: Map<string, { displayName: string; role: Role }>;
+  lastSfx: RoomSfxEvent | null;
 }
 
 const rooms = new Map<string, RoomState>();
