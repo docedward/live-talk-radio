@@ -3,17 +3,110 @@
  *
  * Listener choices: ask a question OR request On Air.
  * Host: moderate questions + approve On Air requests (no host-picked "put on air").
+ * Voice: LiveKit Cloud tokens gated by role + live On Air (host always, one guest).
  */
 
 import { createServer } from "http";
 import { parse } from "url";
+import { readFileSync, existsSync } from "fs";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 import next from "next";
 import { Server } from "socket.io";
 import { randomBytes, randomUUID } from "crypto";
+import { AccessToken } from "livekit-server-sdk";
+
+// --- Load .env.local / .env (Node does not auto-load for custom server) ---
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+function loadEnvFile(filePath) {
+  if (!existsSync(filePath)) return;
+  const text = readFileSync(filePath, "utf8");
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq === -1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let val = trimmed.slice(eq + 1).trim();
+    if (
+      (val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'"))
+    ) {
+      val = val.slice(1, -1);
+    }
+    if (process.env[key] === undefined) process.env[key] = val;
+  }
+}
+
+loadEnvFile(resolve(__dirname, ".env.local"));
+loadEnvFile(resolve(__dirname, ".env"));
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOSTNAME || "0.0.0.0";
 const port = parseInt(process.env.PORT || "3000", 10);
+
+function getLiveKitUrl() {
+  return (
+    process.env.LIVEKIT_URL ||
+    process.env.NEXT_PUBLIC_LIVEKIT_URL ||
+    ""
+  ).trim();
+}
+
+function isVoiceConfigured() {
+  return Boolean(
+    getLiveKitUrl() &&
+      process.env.LIVEKIT_API_KEY?.trim() &&
+      process.env.LIVEKIT_API_SECRET?.trim()
+  );
+}
+
+function livekitRoomName(roomId) {
+  return `trl-${roomId}`;
+}
+
+function isLiveGuest(state, memberId) {
+  if (!state.liveOnAirId) return false;
+  const live = state.onAirRequests.find((r) => r.id === state.liveOnAirId);
+  return !!(live && live.status === "live" && live.memberId === memberId);
+}
+
+function memberCanPublish(state, memberId, role) {
+  if (role === "host") return true;
+  return isLiveGuest(state, memberId);
+}
+
+function voiceInfo(state, memberId, role) {
+  const enabled = isVoiceConfigured();
+  return {
+    enabled,
+    canPublish: enabled && memberCanPublish(state, memberId, role),
+    url: enabled ? getLiveKitUrl() : "",
+  };
+}
+
+async function mintVoiceToken({ roomId, memberId, displayName, canPublish }) {
+  const apiKey = process.env.LIVEKIT_API_KEY?.trim();
+  const apiSecret = process.env.LIVEKIT_API_SECRET?.trim();
+  if (!apiKey || !apiSecret) {
+    throw new Error("Voice is not configured on this server");
+  }
+
+  const at = new AccessToken(apiKey, apiSecret, {
+    identity: memberId,
+    name: displayName || "Guest",
+    ttl: "2h",
+  });
+  at.addGrant({
+    roomJoin: true,
+    room: livekitRoomName(roomId),
+    canPublish,
+    canSubscribe: true,
+    canPublishData: false,
+  });
+  return at.toJwt();
+}
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
@@ -303,7 +396,7 @@ function sessionIdFrom(req, body) {
 }
 
 /** Public snapshot fields for API — strip internal memberId from on-air requests */
-function publicRequest(r) {
+function publicRequest(r, viewerMemberId) {
   return {
     id: r.id,
     roomId: r.roomId,
@@ -311,15 +404,21 @@ function publicRequest(r) {
     note: r.note,
     status: r.status,
     createdAt: r.createdAt,
+    isMe: Boolean(viewerMemberId && r.memberId === viewerMemberId),
   };
 }
 
-function publicSnapshot(roomId, role) {
+function publicSnapshot(roomId, role, memberId) {
+  const state = rooms.get(roomId);
+  if (!state) throw new Error("Room not found");
   const snap = buildSnapshot(roomId, role);
   return {
     ...snap,
-    onAirRequests: snap.onAirRequests.map(publicRequest),
-    liveOnAir: snap.liveOnAir ? publicRequest(snap.liveOnAir) : null,
+    onAirRequests: snap.onAirRequests.map((r) => publicRequest(r, memberId)),
+    liveOnAir: snap.liveOnAir
+      ? publicRequest(snap.liveOnAir, memberId)
+      : null,
+    voice: voiceInfo(state, memberId, role),
   };
 }
 
@@ -334,7 +433,10 @@ async function handleApi(req, res, pathname, query) {
 
   try {
     if (pathname === "/api/health" && req.method === "GET") {
-      sendJson(res, 200, { ok: true });
+      sendJson(res, 200, {
+        ok: true,
+        voice: isVoiceConfigured(),
+      });
       return true;
     }
 
@@ -367,7 +469,7 @@ async function handleApi(req, res, pathname, query) {
       );
       sendJson(res, 200, {
         ok: true,
-        snapshot: publicSnapshot(roomId, role),
+        snapshot: publicSnapshot(roomId, role, memberId),
         sessionId: memberId,
       });
       return true;
@@ -384,7 +486,36 @@ async function handleApi(req, res, pathname, query) {
       touchMember(roomId, memberId);
       sendJson(res, 200, {
         ok: true,
-        snapshot: publicSnapshot(roomId, member.role),
+        snapshot: publicSnapshot(roomId, member.role, memberId),
+      });
+      return true;
+    }
+
+    // POST /api/rooms/:id/voice-token — mint LiveKit JWT for current member
+    const voiceTokenMatch = pathname.match(
+      /^\/api\/rooms\/([^/]+)\/voice-token$/
+    );
+    if (voiceTokenMatch && req.method === "POST") {
+      if (!isVoiceConfigured()) {
+        throw new Error("Voice is not configured on this server");
+      }
+      const roomId = decodeURIComponent(voiceTokenMatch[1]);
+      const body = await readBody(req);
+      const memberId = sessionIdFrom(req, body);
+      const { state, member } = requireMember(roomId, memberId);
+      const canPublish = memberCanPublish(state, memberId, member.role);
+      const token = await mintVoiceToken({
+        roomId,
+        memberId,
+        displayName: member.displayName,
+        canPublish,
+      });
+      sendJson(res, 200, {
+        ok: true,
+        token,
+        url: getLiveKitUrl(),
+        roomName: livekitRoomName(roomId),
+        canPublish,
       });
       return true;
     }
@@ -435,7 +566,10 @@ async function handleApi(req, res, pathname, query) {
       const body = await readBody(req);
       const memberId = sessionIdFrom(req, body);
       const request = addOnAirRequest(roomId, memberId, body.note);
-      sendJson(res, 200, { ok: true, request: publicRequest(request) });
+      sendJson(res, 200, {
+        ok: true,
+        request: publicRequest(request, memberId),
+      });
       return true;
     }
 
@@ -464,7 +598,10 @@ async function handleApi(req, res, pathname, query) {
         action === "live"
           ? setOnAirLive(roomId, memberId, requestId)
           : rejectOnAir(roomId, memberId, requestId);
-      sendJson(res, 200, { ok: true, request: publicRequest(request) });
+      sendJson(res, 200, {
+        ok: true,
+        request: publicRequest(request, memberId),
+      });
       return true;
     }
 
@@ -507,5 +644,10 @@ app.prepare().then(() => {
       `> Live Talk Radio ready on http://${hostname}:${port} (${dev ? "dev" : "prod"})`
     );
     console.log("> REST: questions + On Air requests + presence");
+    console.log(
+      isVoiceConfigured()
+        ? `> Voice: LiveKit enabled (${getLiveKitUrl()})`
+        : "> Voice: off (set LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET)"
+    );
   });
 });

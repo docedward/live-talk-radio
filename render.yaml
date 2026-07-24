@@ -12,3 +12,10 @@ services:
         value: production
       - key: HOSTNAME
         value: 0.0.0.0
+      # Set in Render dashboard (do not put real secrets in git)
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false

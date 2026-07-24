@@ -149,6 +149,20 @@ export function clearOnAir(roomId: string) {
   );
 }
 
+/** Mint a LiveKit access token for the current session (publish rights from server). */
+export function fetchVoiceToken(roomId: string) {
+  return api<{
+    ok: true;
+    token: string;
+    url: string;
+    roomName: string;
+    canPublish: boolean;
+  }>(`/api/rooms/${encodeURIComponent(roomId)}/voice-token`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
 export function pingHealth() {
-  return api<{ ok: true }>("/api/health");
+  return api<{ ok: true; voice?: boolean }>("/api/health");
 }

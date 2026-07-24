@@ -7,6 +7,7 @@ import { fetchSnapshot, joinRoom } from "@/lib/api";
 import { ChatPanel } from "./ChatPanel";
 import { QuestionQueue } from "./QuestionQueue";
 import { PresencePanel } from "./PresencePanel";
+import { VoiceStage } from "./VoiceStage";
 
 type Props = {
   roomId: string;
@@ -155,10 +156,14 @@ export function RoomLobby({ roomId }: Props) {
   }
 
   const isHost = snapshot.role === "host";
+  const voice = snapshot.voice;
+  const voiceEnabled = !!voice?.enabled;
+  const canPublish = !!voice?.canPublish;
   const iAmLive =
     !isHost &&
     !!snapshot.liveOnAir &&
-    snapshot.liveOnAir.authorName === displayName;
+    (snapshot.liveOnAir.isMe === true ||
+      snapshot.liveOnAir.authorName === displayName);
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-8">
@@ -207,15 +212,24 @@ export function RoomLobby({ roomId }: Props) {
       {isHost && (
         <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900 dark:border-violet-900 dark:bg-violet-950/50 dark:text-violet-100">
           <strong>Host controls are on.</strong> Approve or reject questions.
-          On Air only happens when a listener requests it and you put them on.
+          Put a listener On Air to open their mic. Clear On Air to end their
+          mic. The room hears you when voice is connected.
         </div>
       )}
 
       {iAmLive && (
         <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-100">
-          You are On Air right now — the host and room can see you featured.
+          {voiceEnabled
+            ? "You are On Air — allow the mic if prompted. Everyone in the room can hear you. Host can end your air time."
+            : "You are On Air (status only — voice is not configured on this server)."}
         </div>
       )}
+
+      <VoiceStage
+        roomId={roomId}
+        enabled={voiceEnabled}
+        canPublish={canPublish}
+      />
 
       <PresencePanel
         presence={snapshot.presence}

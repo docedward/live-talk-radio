@@ -32,6 +32,18 @@ export interface OnAirRequest {
   note: string;
   status: OnAirStatus;
   createdAt: number;
+  /** True when this request belongs to the current session (server-computed). */
+  isMe?: boolean;
+}
+
+/** LiveKit media plane status for the current session. */
+export interface VoiceInfo {
+  /** Server has LiveKit credentials configured. */
+  enabled: boolean;
+  /** This session may publish audio (host, or live On Air guest). */
+  canPublish: boolean;
+  /** LiveKit WebSocket URL (public). */
+  url: string;
 }
 
 export interface PresenceMember {
@@ -62,4 +74,6 @@ export interface RoomSnapshot {
   /** Everyone currently in the room (host + listeners). */
   presence: PresenceMember[];
   listenerCount: number;
+  /** Voice / LiveKit gate for this session (absent if older server). */
+  voice?: VoiceInfo;
 }

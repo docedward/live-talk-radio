@@ -155,6 +155,7 @@ export function QuestionQueue({
           <div className="mt-1">
             <p className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
               {liveOnAir.authorName}
+              {liveOnAir.isMe ? " (you)" : ""}
             </p>
             {liveOnAir.note ? (
               <p className="mt-0.5 text-sm text-zinc-700 dark:text-zinc-300">
@@ -162,13 +163,19 @@ export function QuestionQueue({
               </p>
             ) : (
               <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
-                Live with the host
+                Live with the host — room can hear their mic when voice is on
               </p>
             )}
-            {role === "listener" && (
+            {role === "listener" && liveOnAir.isMe && (
               <p className="mt-2 text-xs font-medium text-violet-800 dark:text-violet-200">
-                Someone is On Air (if that&apos;s you — you&apos;re featured for
-                the room).
+                Your mic should go live (allow permission if asked). Host can
+                clear you anytime.
+              </p>
+            )}
+            {role === "listener" && !liveOnAir.isMe && (
+              <p className="mt-2 text-xs font-medium text-violet-800 dark:text-violet-200">
+                A guest is On Air — listen via Live voice above. Your mic stays
+                off.
               </p>
             )}
             {role === "host" && (
@@ -177,13 +184,14 @@ export function QuestionQueue({
                 onClick={onClearLive}
                 className="mt-2 text-xs font-medium text-violet-700 underline dark:text-violet-300"
               >
-                Clear On Air
+                Clear On Air (end guest mic)
               </button>
             )}
           </div>
         ) : (
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Nobody on air yet. Listeners request it; host approves.
+            Nobody on air yet. Listeners request it; host approves. Only one
+            guest mic at a time.
           </p>
         )}
       </div>
