@@ -202,6 +202,35 @@ function touchMember(roomId, memberId) {
   if (member) member.lastSeen = Date.now();
 }
 
+/** Drop people who stopped polling / closed the tab (~12s of silence). */
+const MEMBER_STALE_MS = 12_000;
+
+function endLiveForMember(state, memberId) {
+  for (const r of state.onAirRequests) {
+    if (r.memberId === memberId && r.status === "live") {
+      r.status = "done";
+    }
+  }
+}
+
+function pruneStaleMembers(state) {
+  const now = Date.now();
+  for (const [id, member] of state.members.entries()) {
+    const last = member.lastSeen || 0;
+    if (now - last > MEMBER_STALE_MS) {
+      endLiveForMember(state, id);
+      state.members.delete(id);
+    }
+  }
+}
+
+function leaveRoom(roomId, memberId) {
+  const state = rooms.get(roomId);
+  if (!state) return;
+  endLiveForMember(state, memberId);
+  state.members.delete(memberId);
+}
+
 function requireMember(roomId, memberId) {
   const state = rooms.get(roomId);
   if (!state) throw new Error("Room not found");
@@ -407,10 +436,11 @@ function sendJson(res, status, data) {
   res.end(body);
 }
 
-function sessionIdFrom(req, body) {
+function sessionIdFrom(req, body, query) {
   const header = req.headers["x-session-id"];
   if (typeof header === "string" && header.trim()) return header.trim();
   if (body?.sessionId) return String(body.sessionId);
+  if (query?.sessionId) return String(query.sessionId);
   return randomUUID();
 }
 
@@ -430,6 +460,7 @@ function publicRequest(r, viewerMemberId) {
 function publicSnapshot(roomId, role, memberId) {
   const state = rooms.get(roomId);
   if (!state) throw new Error("Room not found");
+  pruneStaleMembers(state);
   const snap = buildSnapshot(roomId, role);
   return {
     ...snap,
@@ -509,6 +540,17 @@ async function handleApi(req, res, pathname, query) {
         ok: true,
         snapshot: publicSnapshot(roomId, member.role, memberId),
       });
+      return true;
+    }
+
+    // POST /api/rooms/:id/leave — tab close / explicit leave
+    const leaveMatch = pathname.match(/^\/api\/rooms\/([^/]+)\/leave$/);
+    if (leaveMatch && req.method === "POST") {
+      const roomId = decodeURIComponent(leaveMatch[1]);
+      const body = await readBody(req);
+      const memberId = sessionIdFrom(req, body, query);
+      leaveRoom(roomId, memberId);
+      sendJson(res, 200, { ok: true });
       return true;
     }
 

@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { RoomSnapshot } from "@/lib/types";
-import { fetchSnapshot, joinRoom } from "@/lib/api";
+import { fetchSnapshot, joinRoom, leaveRoomBeacon } from "@/lib/api";
 import { ChatPanel } from "./ChatPanel";
 import { QuestionQueue } from "./QuestionQueue";
 import { PresencePanel } from "./PresencePanel";
+import { PresenceSfx } from "./PresenceSfx";
 import { VoiceStage } from "./VoiceStage";
+import { unlockPresenceAudio } from "@/lib/presence-sounds";
 
 type Props = {
   roomId: string;
@@ -80,9 +82,25 @@ export function RoomLobby({ roomId }: Props) {
     };
   }, [snapshot, roomId]);
 
+  // Tell the room we left when the tab closes (enables leave cannon for others)
+  useEffect(() => {
+    if (!snapshot) return;
+    const onHide = () => {
+      leaveRoomBeacon(roomId);
+    };
+    window.addEventListener("pagehide", onHide);
+    window.addEventListener("beforeunload", onHide);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      window.removeEventListener("beforeunload", onHide);
+      leaveRoomBeacon(roomId);
+    };
+  }, [snapshot, roomId]);
+
   async function join(name: string, hostToken?: string) {
     setError(null);
     setJoining(true);
+    void unlockPresenceAudio();
 
     // Old phones sometimes leave this stuck; always clear after a hard timeout.
     const stuckTimer = window.setTimeout(() => {
@@ -93,6 +111,7 @@ export function RoomLobby({ roomId }: Props) {
       const safeName = (name || "").trim() || "Guest";
       const result = await joinRoom(roomId, safeName, hostToken);
       setSnapshot(result.snapshot);
+      if (safeName) setDisplayName(safeName);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not join room");
     } finally {
@@ -277,6 +296,12 @@ export function RoomLobby({ roomId }: Props) {
         roomId={roomId}
         enabled={voiceEnabled}
         canPublish={canPublish}
+      />
+
+      <PresenceSfx
+        presence={snapshot.presence}
+        myName={displayName || "Guest"}
+        myRole={snapshot.role}
       />
 
       <PresencePanel

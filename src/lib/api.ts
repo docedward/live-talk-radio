@@ -163,6 +163,44 @@ export function removeFromPanel(roomId: string, requestId: string) {
   return moderateOnAir(roomId, requestId, "remove");
 }
 
+/** Leave room (also used via sendBeacon on tab close). */
+export function leaveRoom(roomId: string) {
+  return api<{ ok: true }>(
+    `/api/rooms/${encodeURIComponent(roomId)}/leave`,
+    { method: "POST", body: JSON.stringify({}) }
+  );
+}
+
+/** Fire-and-forget leave for pagehide (phones often kill the tab). */
+export function leaveRoomBeacon(roomId: string) {
+  if (typeof window === "undefined") return;
+  const sessionId = getSessionId();
+  const url = `/api/rooms/${encodeURIComponent(roomId)}/leave`;
+  const body = JSON.stringify({ sessionId });
+  try {
+    if (navigator.sendBeacon) {
+      const blob = new Blob([body], { type: "application/json" });
+      // Some browsers ignore custom content-type on beacon; also send session in query
+      const ok = navigator.sendBeacon(
+        `${url}?sessionId=${encodeURIComponent(sessionId)}`,
+        blob
+      );
+      if (ok) return;
+    }
+  } catch {
+    /* fall through */
+  }
+  void fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Session-Id": sessionId,
+    },
+    body,
+    keepalive: true,
+  }).catch(() => undefined);
+}
+
 /** Mint a LiveKit access token for the current session (publish rights from server). */
 export function fetchVoiceToken(roomId: string) {
   return api<{
