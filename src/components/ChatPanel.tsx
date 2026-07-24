@@ -185,8 +185,8 @@ export function ChatPanel({ roomId, initialMessages }: Props) {
   }
 
   return (
-    <section className="flex min-h-[280px] flex-1 flex-col rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-      <header className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+    <section className="flex h-[22rem] shrink-0 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white sm:h-[26rem] dark:border-zinc-800 dark:bg-zinc-950">
+      <header className="shrink-0 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
           Live chat
         </h2>
@@ -195,9 +195,10 @@ export function ChatPanel({ roomId, initialMessages }: Props) {
         </p>
       </header>
 
+      {/* Fixed-height scroller — do not grow the page with every message */}
       <div
         ref={listRef}
-        className="flex max-h-64 min-h-[10rem] flex-1 flex-col gap-2 overflow-y-auto overscroll-contain px-4 py-3 sm:max-h-none"
+        className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain px-4 py-3"
       >
         {messages.length === 0 ? (
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
@@ -228,7 +229,7 @@ export function ChatPanel({ roomId, initialMessages }: Props) {
         )}
       </div>
 
-      <div className="relative border-t border-zinc-200 p-3 dark:border-zinc-800">
+      <div className="relative shrink-0 border-t border-zinc-200 p-3 dark:border-zinc-800">
         {emojiOpen && (
           <div
             ref={pickerRef}

@@ -201,8 +201,8 @@ export function QuestionQueue({
   );
 
   return (
-    <section className="flex min-h-[320px] flex-1 flex-col rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-      <header className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+    <section className="flex h-[28rem] shrink-0 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white sm:h-[32rem] dark:border-zinc-800 dark:bg-zinc-950">
+      <header className="shrink-0 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
           Questions &amp; speaker panel
         </h2>
@@ -214,7 +214,7 @@ export function QuestionQueue({
       </header>
 
       {/* Speaker panel — host sees names; listeners only count / own status */}
-      <div className="border-b border-zinc-200 bg-violet-50 px-4 py-3 dark:border-zinc-800 dark:bg-violet-950/40">
+      <div className="max-h-40 shrink-0 overflow-y-auto border-b border-zinc-200 bg-violet-50 px-4 py-3 dark:border-zinc-800 dark:bg-violet-950/40">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">
             Speaker panel ({panelCount}/{cap} guests)
@@ -341,7 +341,7 @@ export function QuestionQueue({
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 py-3">
         {/* On Air requests */}
         <div>
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
