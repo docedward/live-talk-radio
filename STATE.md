@@ -16,12 +16,14 @@ Live Talk Radio: moderated text rooms **plus** live 2-person voice (host always;
   - Snapshot `voice: { enabled, canPublish, url }` + `liveOnAir.isMe`
   - `VoiceStage` (LiveKit): host mic, all subscribe, guest publish on On Air, clear revokes via re-token
   - Homepage copy updated for live voice
+  - Phone path: tap-to-start voice, secure-context warning, `scripts/phone-tunnel.sh`, PHONE.md
 
 ## Next
-- Manual test: host + guest + spectator (3 browsers)
-- Phone listen on HTTPS (tunnel or Render) + permission UX polish
+- Phone test with `scripts/phone-tunnel.sh` (HTTPS)
 - Phase 5: Render secrets + permanent URL
 - Optional: LiveKit RoomService `updateParticipant` for faster revoke than poll+retoken
+- Optional: level meter / “who you’re hearing” strip
 
 ## Blockers
-- (none for local desktop demo if `.env.local` has LiveKit keys)
+- (none for local desktop if `.env.local` has LiveKit keys)
+- Phones need HTTPS tunnel while Mac hosts the app (see PHONE.md)

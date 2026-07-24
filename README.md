@@ -48,6 +48,10 @@ Use two browser windows (or one normal + one private window) for host and listen
 2. Listener requests On Air → host Put them On Air → guest allows mic → host + spectator hear guest.
 3. Host Clear On Air → guest mic stops; host still heard.
 
+### Phones
+
+See **[PHONE.md](./PHONE.md)** — run the app + `./scripts/phone-tunnel.sh` for an HTTPS link. Phones must open `https://….trycloudflare.com`, not `http://192.168…`.
+
 ## Project map (plain language)
 
 | Path | What it is |

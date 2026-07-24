@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   LiveKitRoom,
   RoomAudioRenderer,
   useLocalParticipant,
   useConnectionState,
 } from "@livekit/components-react";
-import { ConnectionState } from "livekit-client";
+import { ConnectionState, Room } from "livekit-client";
 import { fetchVoiceToken } from "@/lib/api";
 
 type Props = {
@@ -18,16 +18,31 @@ type Props = {
   enabled: boolean;
 };
 
+function isProbablyMobile() {
+  if (typeof navigator === "undefined") return false;
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
 /**
- * LiveKit media plane: host publishes when canPublish; everyone subscribes.
- * Re-fetches token when canPublish flips so guest gains/loses publish rights.
+ * LiveKit media plane with phone-friendly UX:
+ * - User must tap to start voice (Safari mic + autoplay policies)
+ * - HTTPS / secure-context warning when needed
+ * - Explicit mic enable when On Air on mobile
  */
 export function VoiceStage({ roomId, canPublish, enabled }: Props) {
+  const [started, setStarted] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [url, setUrl] = useState<string | null>(null);
   const [tokenCanPublish, setTokenCanPublish] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const secure = useMemo(() => {
+    if (typeof window === "undefined") return true;
+    return window.isSecureContext;
+  }, []);
+
+  const mobile = useMemo(() => isProbablyMobile(), []);
 
   const refreshToken = useCallback(async () => {
     setLoading(true);
@@ -46,21 +61,59 @@ export function VoiceStage({ roomId, canPublish, enabled }: Props) {
     }
   }, [roomId]);
 
-  // Connect / refresh when room joins or publish rights change (On Air live/clear).
+  // After user starts, keep token in sync when On Air publish rights flip.
   useEffect(() => {
-    if (!enabled) {
-      setToken(null);
-      setUrl(null);
-      return;
-    }
+    if (!enabled || !started) return;
     void refreshToken();
-  }, [enabled, canPublish, refreshToken]);
+  }, [enabled, started, canPublish, refreshToken]);
 
   if (!enabled) {
     return (
       <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
         Voice is off on this server (no LiveKit keys). Text chat and On Air
         status still work.
+      </div>
+    );
+  }
+
+  if (!secure) {
+    return (
+      <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+        <p className="font-semibold">Voice needs a secure link (HTTPS)</p>
+        <p className="mt-1">
+          Phones block the microphone on plain <code className="text-xs">http://</code>{" "}
+          LAN addresses. Open the app via the <strong>HTTPS tunnel</strong> link
+          (see <code className="text-xs">scripts/phone-tunnel.sh</code>), not{" "}
+          <code className="text-xs">http://192.168…</code>.
+        </p>
+      </div>
+    );
+  }
+
+  if (!started) {
+    return (
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 dark:border-emerald-900 dark:bg-emerald-950/40">
+        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
+          Live voice
+        </p>
+        <p className="mt-1 text-sm font-medium text-zinc-900 dark:text-zinc-50">
+          Tap once so this phone can play sound
+          {canPublish ? " and use the mic" : ""}.
+        </p>
+        <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+          {mobile
+            ? "Safari and Chrome on phones require a tap before audio or mic work."
+            : "Also recommended on desktop if sound is blocked."}
+          {" "}
+          Not recording. Only people in this room hear you when your mic is on.
+        </p>
+        <button
+          type="button"
+          onClick={() => setStarted(true)}
+          className="mt-3 w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-500 sm:w-auto"
+        >
+          {canPublish ? "Start live voice (mic)" : "Enable live sound"}
+        </button>
       </div>
     );
   }
@@ -73,7 +126,7 @@ export function VoiceStage({ roomId, canPublish, enabled }: Props) {
         <button
           type="button"
           onClick={() => void refreshToken()}
-          className="mt-2 text-xs font-semibold underline"
+          className="mt-2 min-h-11 rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold text-white"
         >
           Retry
         </button>
@@ -95,26 +148,68 @@ export function VoiceStage({ roomId, canPublish, enabled }: Props) {
       token={token}
       serverUrl={url}
       connect
-      audio={tokenCanPublish}
+      // Don't auto-grab mic; VoiceChrome turns it on after an explicit tap (phones).
+      audio={false}
       video={false}
       onError={(err) => setLoadError(err.message)}
       className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 dark:border-emerald-900 dark:bg-emerald-950/40"
     >
       <RoomAudioRenderer />
-      <VoiceChrome canPublish={tokenCanPublish} />
+      <VoiceChrome canPublish={tokenCanPublish} mobile={mobile} />
     </LiveKitRoom>
   );
 }
 
-function VoiceChrome({ canPublish }: { canPublish: boolean }) {
+function VoiceChrome({
+  canPublish,
+  mobile,
+}: {
+  canPublish: boolean;
+  mobile: boolean;
+}) {
   const connectionState = useConnectionState();
   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
   const [micError, setMicError] = useState<string | null>(null);
+  const [audioHint, setAudioHint] = useState(mobile);
 
   const connected = connectionState === ConnectionState.Connected;
   const connecting =
     connectionState === ConnectionState.Connecting ||
     connectionState === ConnectionState.Reconnecting;
+
+  // When host (or newly On Air guest) gains publish rights, do not force mic until they tap.
+  // Hosts often want mic immediately after first "Start" — enable once on connect for publishers.
+  useEffect(() => {
+    if (!connected || !canPublish || !localParticipant) return;
+    if (isMicrophoneEnabled) return;
+    // Auto-enable mic only after the initial Start tap flow (component only mounts after start).
+    // On mobile, still require an extra Unmute tap if auto fails.
+    let cancelled = false;
+    (async () => {
+      try {
+        await localParticipant.setMicrophoneEnabled(true);
+      } catch {
+        if (!cancelled) {
+          setMicError(
+            mobile
+              ? "Tap Unmute and allow the microphone when iPhone/Android asks."
+              : "Allow the microphone, then tap Unmute."
+          );
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connected, canPublish, localParticipant, isMicrophoneEnabled, mobile]);
+
+  // When publish rights removed (Clear On Air), force mic off.
+  useEffect(() => {
+    if (!localParticipant) return;
+    if (!canPublish && isMicrophoneEnabled) {
+      void localParticipant.setMicrophoneEnabled(false);
+    }
+  }, [canPublish, isMicrophoneEnabled, localParticipant]);
 
   async function toggleMute() {
     if (!localParticipant || !canPublish) return;
@@ -125,6 +220,26 @@ function VoiceChrome({ canPublish }: { canPublish: boolean }) {
       setMicError(
         "Could not access the microphone. Allow mic permission and try again."
       );
+    }
+  }
+
+  /** Extra gesture to satisfy Safari autoplay if remote audio is silent. */
+  async function pokeAudio() {
+    setAudioHint(false);
+    try {
+      // Resume any suspended audio elements RoomAudioRenderer attached.
+      const els = document.querySelectorAll("audio");
+      for (const el of els) {
+        try {
+          await el.play();
+        } catch {
+          /* ignore single element failures */
+        }
+      }
+      // Touch room if available via window (not always exposed); no-op otherwise.
+      void Room;
+    } catch {
+      /* ignore */
     }
   }
 
@@ -140,7 +255,7 @@ function VoiceChrome({ canPublish }: { canPublish: boolean }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
             Live voice
           </p>
@@ -149,8 +264,8 @@ function VoiceChrome({ canPublish }: { canPublish: boolean }) {
           </p>
           {canPublish ? (
             <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-400">
-              Who can hear you: everyone in this room (not the public internet
-              outside the link). Not recording.
+              Who can hear you: everyone in this room. Not recording. Earbuds
+              help reduce echo.
             </p>
           ) : (
             <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-400">
@@ -164,7 +279,7 @@ function VoiceChrome({ canPublish }: { canPublish: boolean }) {
             type="button"
             onClick={() => void toggleMute()}
             disabled={!connected}
-            className={`rounded-xl px-3 py-2 text-sm font-semibold disabled:opacity-50 ${
+            className={`min-h-11 min-w-[5.5rem] rounded-xl px-4 py-3 text-sm font-semibold disabled:opacity-50 ${
               isMicrophoneEnabled
                 ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                 : "bg-amber-500 text-white"
@@ -174,13 +289,24 @@ function VoiceChrome({ canPublish }: { canPublish: boolean }) {
           </button>
         )}
       </div>
+
+      {connected && (
+        <button
+          type="button"
+          onClick={() => void pokeAudio()}
+          className="min-h-11 w-full rounded-xl border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-900 dark:border-emerald-800 dark:bg-zinc-900 dark:text-emerald-100 sm:w-auto"
+        >
+          {audioHint ? "Tap if you hear nothing" : "Replay room audio"}
+        </button>
+      )}
+
       {micError && (
         <p className="text-xs text-red-700 dark:text-red-300">{micError}</p>
       )}
       {connected && canPublish && !isMicrophoneEnabled && !micError && (
         <p className="text-xs text-amber-800 dark:text-amber-200">
-          Mic is muted or waiting for browser permission. Click Unmute and allow
-          the microphone if prompted.
+          Mic is off. Tap <strong>Unmute</strong>
+          {mobile ? " and allow the microphone" : ""}.
         </p>
       )}
     </div>

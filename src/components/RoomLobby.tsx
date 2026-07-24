@@ -98,7 +98,15 @@ export function RoomLobby({ roomId }: Props) {
     const url = window.location.href;
     try {
       await navigator.clipboard.writeText(url);
-      setShareNote("Link copied — send it to listeners.");
+      const isLocal =
+        typeof window !== "undefined" &&
+        (window.location.hostname === "localhost" ||
+          window.location.hostname === "127.0.0.1");
+      setShareNote(
+        isLocal
+          ? "Link copied (localhost). Phones need the HTTPS tunnel link — see PHONE.md."
+          : "Link copied — send it to listeners (works on phones if this is https)."
+      );
     } catch {
       setShareNote(url);
     }
