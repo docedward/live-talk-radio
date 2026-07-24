@@ -15,7 +15,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Live Talk Radio",
   description:
-    "Text-only live talk: hosts moderate a question queue while listeners chat in real time.",
+    "Live talk radio with voice panel, chat, and host soundboard.",
+  // Help mobile keep the page more active during a show
+  other: {
+    "mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-capable": "yes",
+  },
 };
 
 export default function RootLayout({

@@ -112,7 +112,8 @@ export function RoomLobby({ roomId }: Props) {
       }
     }
 
-    const id = setInterval(poll, 2000);
+    // Faster heartbeat so flaky tunnels less often mark listeners "gone"
+    const id = setInterval(poll, 1500);
     return () => {
       cancelled = true;
       clearInterval(id);
