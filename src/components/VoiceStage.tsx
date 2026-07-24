@@ -332,9 +332,7 @@ function VoiceKeepAlive({
         onNeedReconnect();
         return;
       }
-      if (canPublish && !hostMuted && localParticipant) {
-        void localParticipant.setMicrophoneEnabled(true).catch(() => undefined);
-      }
+      // Do not force-unmute here — that fought the Mute button and made it look stuck.
     };
 
     document.addEventListener("visibilitychange", onVisible);
@@ -417,11 +415,22 @@ function VoiceChrome({
   const [micError, setMicError] = useState<string | null>(null);
   const [audioHint, setAudioHint] = useState(mobile);
   const [remoteAudioCount, setRemoteAudioCount] = useState(0);
+  /** User chose mute — never auto-turn mic back on (this was the stuck black Mute bug). */
+  const userWantsMicOff = useRef(false);
+  /** Only auto-enable mic once per connection. */
+  const didAutoEnableMic = useRef(false);
 
   const connected = connectionState === ConnectionState.Connected;
   const connecting =
     connectionState === ConnectionState.Connecting ||
     connectionState === ConnectionState.Reconnecting;
+
+  // Reset one-shot flags when we leave the room connection
+  useEffect(() => {
+    if (!connected) {
+      didAutoEnableMic.current = false;
+    }
+  }, [connected]);
 
   // Count remote audio tracks (are we actually receiving anyone?)
   useEffect(() => {
@@ -469,14 +478,21 @@ function VoiceChrome({
     };
   }, [room]);
 
+  // Auto-enable mic ONCE when we first connect as publisher — never fight the user Mute button
   useEffect(() => {
     if (!connected || !canPublish || !localParticipant) return;
     if (hostMuted) return;
-    if (isMicrophoneEnabled) return;
+    if (userWantsMicOff.current) return;
+    if (didAutoEnableMic.current) return;
+    if (isMicrophoneEnabled) {
+      didAutoEnableMic.current = true;
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
         await localParticipant.setMicrophoneEnabled(true);
+        if (!cancelled) didAutoEnableMic.current = true;
       } catch {
         if (!cancelled) {
           setMicError(
@@ -509,11 +525,13 @@ function VoiceChrome({
   async function forceMicOn() {
     if (!localParticipant || !canPublish || hostMuted) return;
     setMicError(null);
+    userWantsMicOff.current = false;
     try {
       // Hard cycle: off then on forces a new MediaStream track publish
       await localParticipant.setMicrophoneEnabled(false);
-      await new Promise((r) => setTimeout(r, 150));
+      await new Promise((r) => setTimeout(r, 200));
       await localParticipant.setMicrophoneEnabled(true);
+      didAutoEnableMic.current = true;
     } catch {
       setMicError(
         "Could not start microphone. Check browser site settings → Microphone → Allow, then try Restart mic."
@@ -525,17 +543,15 @@ function VoiceChrome({
     if (!localParticipant || !canPublish || hostMuted) return;
     setMicError(null);
     try {
-      const next = !isMicrophoneEnabled;
-      await localParticipant.setMicrophoneEnabled(next);
-      // If "unmute" didn't stick, force cycle
-      if (next) {
-        await new Promise((r) => setTimeout(r, 100));
-        const stillOff = ![...localParticipant.audioTrackPublications.values()].some(
-          (pub) => pub.track && !pub.isMuted
-        );
-        if (stillOff) {
-          await forceMicOn();
-        }
+      const turnOn = !isMicrophoneEnabled;
+      if (turnOn) {
+        userWantsMicOff.current = false;
+        await localParticipant.setMicrophoneEnabled(true);
+        didAutoEnableMic.current = true;
+      } else {
+        // User wants mute — must set flag BEFORE disable or the auto-enable effect races
+        userWantsMicOff.current = true;
+        await localParticipant.setMicrophoneEnabled(false);
       }
     } catch {
       setMicError("Could not access the microphone.");
