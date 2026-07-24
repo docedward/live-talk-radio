@@ -17,11 +17,11 @@ Live Talk Radio: moderated text rooms **plus** live voice (host always; **speake
   - `VoiceStage` (LiveKit): host mic, all subscribe, guest publish on On Air, clear revokes via re-token
   - Homepage copy updated for live voice
   - Phone path: tap-to-start voice, secure-context warning, `scripts/phone-tunnel.sh`, PHONE.md
+  - **Speaker panel:** host + up to 5 live guests; add / remove one / clear all
 
 ## Next
-- Phone test with `scripts/phone-tunnel.sh` (HTTPS)
 - Phase 5: Render secrets + permanent URL
-- Optional: LiveKit RoomService `updateParticipant` for faster revoke than poll+retoken
+- Optional: LiveKit RoomService `updateParticipant` for faster revoke
 - Optional: level meter / “who you’re hearing” strip
 
 ## Blockers
