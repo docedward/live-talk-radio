@@ -453,11 +453,19 @@ function clearOnAir(roomId, hostMemberId) {
   }
 }
 
-function readBody(req) {
+/**
+ * Buffer the request body immediately. Must be started as soon as the
+ * request arrives — if we only attach listeners after awaits, small POST
+ * bodies can finish first and `end` never fires (create-room hang on Mac).
+ */
+function bufferRequestBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on("data", (c) => chunks.push(c));
-    req.on("end", () => {
+    let settled = false;
+
+    function finish() {
+      if (settled) return;
+      settled = true;
       const raw = Buffer.concat(chunks).toString("utf8");
       if (!raw) return resolve({});
       try {
@@ -465,9 +473,25 @@ function readBody(req) {
       } catch {
         reject(new Error("Invalid JSON body"));
       }
+    }
+
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", finish);
+    req.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
     });
-    req.on("error", reject);
+
+    // Body already fully received before we subscribed
+    if (req.readableEnded || req.complete) {
+      finish();
+    }
   });
+}
+
+function methodHasBody(method) {
+  return method === "POST" || method === "PUT" || method === "PATCH";
 }
 
 function sendJson(res, status, data) {
@@ -548,13 +572,15 @@ function publicSnapshot(roomId, role, memberId) {
 }
 
 /** @returns {Promise<boolean>} true if handled */
-async function handleApi(req, res, pathname, query) {
+async function handleApi(req, res, pathname, query, bodyPromise) {
   if (req.method === "OPTIONS" && pathname.startsWith("/api/")) {
     sendJson(res, 204, {});
     return true;
   }
 
   if (!pathname.startsWith("/api/")) return false;
+
+  const body = bodyPromise ? await bodyPromise : {};
 
   try {
     if (pathname === "/api/health" && req.method === "GET") {
@@ -571,7 +597,6 @@ async function handleApi(req, res, pathname, query) {
     }
 
     if (pathname === "/api/rooms" && req.method === "POST") {
-      const body = await readBody(req);
       const room = createRoom(body.name);
       sendJson(res, 200, {
         ok: true,
@@ -584,7 +609,6 @@ async function handleApi(req, res, pathname, query) {
     const joinMatch = pathname.match(/^\/api\/rooms\/([^/]+)\/join$/);
     if (joinMatch && req.method === "POST") {
       const roomId = decodeURIComponent(joinMatch[1]);
-      const body = await readBody(req);
       const memberId = sessionIdFrom(req, body);
       const { role } = joinRoom(
         roomId,
@@ -620,7 +644,6 @@ async function handleApi(req, res, pathname, query) {
     const sfxMatch = pathname.match(/^\/api\/rooms\/([^/]+)\/sfx$/);
     if (sfxMatch && req.method === "POST") {
       const roomId = decodeURIComponent(sfxMatch[1]);
-      const body = await readBody(req);
       const memberId = sessionIdFrom(req, body, query);
       const lastSfx = triggerSfx(roomId, memberId, body.sound);
       sendJson(res, 200, { ok: true, lastSfx });
@@ -631,7 +654,6 @@ async function handleApi(req, res, pathname, query) {
     const leaveMatch = pathname.match(/^\/api\/rooms\/([^/]+)\/leave$/);
     if (leaveMatch && req.method === "POST") {
       const roomId = decodeURIComponent(leaveMatch[1]);
-      const body = await readBody(req);
       const memberId = sessionIdFrom(req, body, query);
       leaveRoom(roomId, memberId);
       sendJson(res, 200, { ok: true });
@@ -647,7 +669,6 @@ async function handleApi(req, res, pathname, query) {
         throw new Error("Voice is not configured on this server");
       }
       const roomId = decodeURIComponent(voiceTokenMatch[1]);
-      const body = await readBody(req);
       const memberId = sessionIdFrom(req, body);
       const { state, member } = requireMember(roomId, memberId);
       const canPublish = memberCanPublish(state, memberId, member.role);
@@ -670,7 +691,6 @@ async function handleApi(req, res, pathname, query) {
     const chatMatch = pathname.match(/^\/api\/rooms\/([^/]+)\/chat$/);
     if (chatMatch && req.method === "POST") {
       const roomId = decodeURIComponent(chatMatch[1]);
-      const body = await readBody(req);
       const memberId = sessionIdFrom(req, body);
       const message = addChat(roomId, memberId, body.text);
       sendJson(res, 200, { ok: true, message });
@@ -680,7 +700,6 @@ async function handleApi(req, res, pathname, query) {
     const qSubmit = pathname.match(/^\/api\/rooms\/([^/]+)\/questions$/);
     if (qSubmit && req.method === "POST") {
       const roomId = decodeURIComponent(qSubmit[1]);
-      const body = await readBody(req);
       const memberId = sessionIdFrom(req, body);
       const question = addQuestion(roomId, memberId, body.text);
       sendJson(res, 200, { ok: true, question });
@@ -694,7 +713,6 @@ async function handleApi(req, res, pathname, query) {
       const roomId = decodeURIComponent(qAction[1]);
       const questionId = decodeURIComponent(qAction[2]);
       const action = qAction[3];
-      const body = await readBody(req);
       const memberId = sessionIdFrom(req, body);
       const question = setQuestionStatus(
         roomId,
@@ -710,7 +728,6 @@ async function handleApi(req, res, pathname, query) {
     const onAirSubmit = pathname.match(/^\/api\/rooms\/([^/]+)\/on-air$/);
     if (onAirSubmit && req.method === "POST") {
       const roomId = decodeURIComponent(onAirSubmit[1]);
-      const body = await readBody(req);
       const memberId = sessionIdFrom(req, body);
       const request = addOnAirRequest(roomId, memberId, body.note);
       sendJson(res, 200, {
@@ -724,7 +741,6 @@ async function handleApi(req, res, pathname, query) {
     const onAirClear = pathname.match(/^\/api\/rooms\/([^/]+)\/on-air\/clear$/);
     if (onAirClear && req.method === "POST") {
       const roomId = decodeURIComponent(onAirClear[1]);
-      const body = await readBody(req);
       const memberId = sessionIdFrom(req, body);
       clearOnAir(roomId, memberId);
       sendJson(res, 200, { ok: true });
@@ -739,7 +755,6 @@ async function handleApi(req, res, pathname, query) {
       const roomId = decodeURIComponent(onAirAction[1]);
       const requestId = decodeURIComponent(onAirAction[2]);
       const action = onAirAction[3];
-      const body = await readBody(req);
       const memberId = sessionIdFrom(req, body);
       let request;
       if (action === "live") {
@@ -773,8 +788,20 @@ app.prepare().then(() => {
     const parsedUrl = parse(req.url || "/", true);
     const pathname = parsedUrl.pathname || "/";
 
+    // Start reading body immediately for API POSTs (avoids hang if stream ends early)
+    const bodyPromise =
+      pathname.startsWith("/api/") && methodHasBody(req.method || "")
+        ? bufferRequestBody(req)
+        : null;
+
     try {
-      const handled = await handleApi(req, res, pathname, parsedUrl.query || {});
+      const handled = await handleApi(
+        req,
+        res,
+        pathname,
+        parsedUrl.query || {},
+        bodyPromise
+      );
       if (handled) return;
     } catch (err) {
       sendJson(res, 500, { error: err.message || "Server error" });
