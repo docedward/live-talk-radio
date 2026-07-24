@@ -15,9 +15,9 @@ type Props = {
 };
 
 /**
- * Host-only pad: 12 effects (WAV in /sfx, synth fallback).
- * Smaller buttons so the full board fits without bulk.
- * Plays immediately here, then tells the server so everyone else hears too.
+ * Host-only pads: only the host can press them.
+ * Server rejects non-hosts. Plays for host immediately, then broadcasts
+ * so every listener hears the same cue.
  */
 export function HostSoundboard({ roomId }: Props) {
   const [busy, setBusy] = useState<HostSfxId | null>(null);
@@ -39,6 +39,7 @@ export function HostSoundboard({ roomId }: Props) {
       );
     }
     try {
+      // Server: host-only. Listeners receive via RoomSfxPlayer + LiveKit.
       await triggerRoomSfx(roomId, id);
       setLast(label);
     } catch (err) {
@@ -55,7 +56,7 @@ export function HostSoundboard({ roomId }: Props) {
           Host soundboard
         </h2>
         <p className="text-[11px] text-amber-800/80 dark:text-amber-200/80">
-          Whole room hears these · 12 pads · replace WAVs in public/sfx anytime
+          Only you press · everyone hears
         </p>
       </div>
       <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">

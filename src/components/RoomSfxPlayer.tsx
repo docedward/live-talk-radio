@@ -13,29 +13,23 @@ type Props = {
   roomId: string;
   /** Latest board cue from the parent snapshot (or null). */
   lastSfx: RoomSfxEvent | null | undefined;
-  /** Host already played on click — skip double-play. */
+  /** Host already played on button press — skip double-play. */
   isHost: boolean;
 };
 
 /**
- * Everyone: play host soundboard cues when lastSfx changes.
- * Shows an explicit “Enable room sound” control so browsers allow audio.
+ * Playback only — no pads for listeners.
+ * Host fires pads on HostSoundboard; server broadcasts lastSfx;
+ * this component plays those cues for anyone who unlocked audio.
  */
 export function RoomSfxPlayer({ roomId, lastSfx, isHost }: Props) {
   const playedId = useRef<string | null>(null);
-  const cue = useRef<RoomSfxEvent | null | undefined>(lastSfx);
   const [soundOn, setSoundOn] = useState(false);
-  const [hint, setHint] = useState(true);
-
-  useEffect(() => {
-    cue.current = lastSfx;
-  }, [lastSfx]);
 
   async function enableSound() {
     await unlockHostSfx();
     setSoundOn(true);
-    setHint(false);
-    // Prove audio works with a short ding
+    // Short test so they know speakers work
     await playHostSfx("ding");
   }
 
@@ -44,23 +38,23 @@ export function RoomSfxPlayer({ roomId, lastSfx, isHost }: Props) {
     if (playedId.current === event.id) return;
     if (!isHostSfxId(event.sound)) return;
 
-    // Host already plays on button press
+    // Host already played on pad press — don't double
     if (isHost && Date.now() - event.at < 2500) {
       playedId.current = event.id;
       return;
     }
 
-    // Don't mark played until audio actually starts
+    // Listeners only play after they unlocked browser audio
+    if (!isHost && !soundOn) return;
+
     const ok = await playHostSfx(event.sound);
     if (ok) {
       playedId.current = event.id;
       setSoundOn(true);
-      setHint(false);
     }
   }
 
   useEffect(() => {
-    if (!soundOn && !isHost) return;
     void maybePlay(lastSfx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastSfx, isHost, soundOn]);
@@ -68,7 +62,6 @@ export function RoomSfxPlayer({ roomId, lastSfx, isHost }: Props) {
   useEffect(() => {
     let cancelled = false;
     async function tick() {
-      if (!soundOn && !isHost) return;
       try {
         const res = await fetchSnapshot(roomId);
         if (cancelled) return;
@@ -85,7 +78,7 @@ export function RoomSfxPlayer({ roomId, lastSfx, isHost }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, isHost, soundOn]);
 
-  // Host: board clicks unlock audio; still show a small enable if they hear nothing
+  // Host: unlock speakers only (pads are on HostSoundboard)
   if (isHost) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 dark:border-amber-900 dark:bg-amber-950/30">
@@ -94,15 +87,18 @@ export function RoomSfxPlayer({ roomId, lastSfx, isHost }: Props) {
           onClick={() => void enableSound()}
           className="min-h-11 w-full rounded-xl bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-500"
         >
-          {soundOn ? "Test soundboard audio (ding)" : "Tap to enable soundboard audio"}
+          {soundOn
+            ? "Soundboard ready (tap to re-test)"
+            : "Tap to enable soundboard audio"}
         </button>
         <p className="mt-1 text-[11px] text-amber-900/80 dark:text-amber-200/80">
-          Browsers block sound until you tap. Then try a pad (Laugh, Ding…).
+          Only the host can fire pads. Everyone in the room hears them.
         </p>
       </div>
     );
   }
 
+  // Listener: no pads — only unlock so they can hear host effects
   return (
     <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-2 dark:border-emerald-900 dark:bg-emerald-950/30">
       <button
@@ -111,14 +107,12 @@ export function RoomSfxPlayer({ roomId, lastSfx, isHost }: Props) {
         className="min-h-11 w-full rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
       >
         {soundOn
-          ? "Room sound on — tap to test (ding)"
-          : "Tap to enable room sound (effects + help voice)"}
+          ? "Hearing host effects (tap to re-test)"
+          : "Tap to hear host sound effects"}
       </button>
-      {hint && (
-        <p className="mt-1 text-[11px] text-emerald-900/80 dark:text-emerald-200/80">
-          Required on phones: without this tap, host soundboard and voice stay silent.
-        </p>
-      )}
+      <p className="mt-1 text-[11px] text-emerald-900/80 dark:text-emerald-200/80">
+        You cannot fire the board — only the host can. This unlocks your speakers.
+      </p>
     </div>
   );
 }
