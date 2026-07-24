@@ -26,8 +26,6 @@ type Props = {
   panelCap: number;
 };
 
-type ListenerMode = "question" | "onair";
-
 /**
  * Questions + On Air panel.
  * Host can put multiple guests On Air (up to panelCap).
@@ -49,7 +47,6 @@ export function QuestionQueue({
   );
   const [cap, setCap] = useState(panelCap);
   const [panelCount, setPanelCount] = useState(initialLivePanel.length);
-  const [mode, setMode] = useState<ListenerMode>("question");
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -120,22 +117,33 @@ export function QuestionQueue({
     setError(null);
     setBusy(true);
     try {
-      if (mode === "question") {
-        if (!text.trim()) throw new Error("Type a question first");
-        await submitQuestion(roomId, text);
-      } else {
-        if (iAmOnPanel) {
-          throw new Error("You are already live on the panel");
-        }
-        if (iAmPendingOnAir) {
-          throw new Error("You already have an On Air request pending");
-        }
-        await requestOnAir(roomId, text);
-      }
+      if (!text.trim()) throw new Error("Type a question first");
+      await submitQuestion(roomId, text);
       setText("");
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not submit");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** One tap — send On Air request to the host immediately (optional note = current text). */
+  async function onRequestOnAirNow() {
+    setError(null);
+    setBusy(true);
+    try {
+      if (iAmOnPanel) {
+        throw new Error("You are already live on the panel");
+      }
+      if (iAmPendingOnAir) {
+        throw new Error("You already have an On Air request pending");
+      }
+      await requestOnAir(roomId, text.trim());
+      setText("");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not request On Air");
     } finally {
       setBusy(false);
     }
@@ -503,61 +511,40 @@ export function QuestionQueue({
 
         {role === "listener" && !iAmOnPanel && (
           <div className={iAmPendingOnAir ? "mt-3" : ""}>
-            <div className="mb-2 flex gap-2">
-              <ModeBtn
-                active={mode === "question"}
-                onClick={() => setMode("question")}
-                label="Ask a question"
+            <form onSubmit={submit} className="flex gap-2">
+              <input
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder={
+                  iAmPendingOnAir
+                    ? "Type a text question…"
+                    : "Type a question (optional note for On Air)…"
+                }
+                maxLength={400}
+                className="min-w-0 flex-1 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none ring-violet-500 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
               />
-              {!iAmPendingOnAir && (
-                <ModeBtn
-                  active={mode === "onair"}
-                  onClick={() => setMode("onair")}
-                  label="Request On Air"
-                />
-              )}
-            </div>
+              <button
+                type="submit"
+                disabled={busy || !text.trim()}
+                className="rounded-xl bg-violet-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
+              >
+                Ask
+              </button>
+            </form>
 
-            {/* While pending, only allow questions — not another On Air request */}
-            {(mode === "question" || iAmPendingOnAir) && (
-              <form onSubmit={submit} className="flex gap-2">
-                <input
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  placeholder="Type your question…"
-                  maxLength={400}
-                  className="min-w-0 flex-1 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none ring-violet-500 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-                />
-                <button
-                  type="submit"
-                  disabled={busy || !text.trim()}
-                  className="rounded-xl bg-violet-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
-                >
-                  Ask
-                </button>
-              </form>
-            )}
-
-            {!iAmPendingOnAir && mode === "onair" && (
+            {!iAmPendingOnAir && (
               <>
-                <form onSubmit={submit} className="flex gap-2">
-                  <input
-                    value={text}
-                    onChange={(e) => setText(e.target.value)}
-                    placeholder="Optional note (topic)…"
-                    maxLength={200}
-                    className="min-w-0 flex-1 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none ring-violet-500 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-                  />
-                  <button
-                    type="submit"
-                    disabled={busy}
-                    className="rounded-xl bg-violet-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
-                  >
-                    Request
-                  </button>
-                </form>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void onRequestOnAirNow()}
+                  className="mt-2 min-h-11 w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-40"
+                >
+                  Request On Air
+                </button>
                 <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-                  Note is optional. Host must approve before you go On Air.
+                  One tap sends the request to the host. Optional: type a short
+                  topic above first.
                 </p>
               </>
             )}
@@ -592,30 +579,6 @@ export function QuestionQueue({
         <p className="px-3 pb-3 text-xs text-red-600 dark:text-red-400">{error}</p>
       )}
     </section>
-  );
-}
-
-function ModeBtn({
-  active,
-  onClick,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex-1 rounded-xl px-2 py-2 text-xs font-semibold transition ${
-        active
-          ? "bg-violet-600 text-white"
-          : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
-      }`}
-    >
-      {label}
-    </button>
   );
 }
 
