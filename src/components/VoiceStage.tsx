@@ -16,6 +16,7 @@ import {
 } from "livekit-client";
 import { fetchVoiceToken } from "@/lib/api";
 import { isHostSfxId, playHostSfx, unlockHostSfx } from "@/lib/host-sfx";
+import { SpeakingStrip } from "./SpeakingStrip";
 
 type Props = {
   roomId: string;
@@ -270,6 +271,7 @@ export function VoiceStage({
           hostMuted={hostMuted}
           mobile={mobile}
         />
+        <SpeakingStrip />
       </LiveKitRoom>
     </div>
   );

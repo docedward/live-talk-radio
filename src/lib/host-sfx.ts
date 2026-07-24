@@ -1,7 +1,8 @@
 /**
- * Host soundboard — all sounds are synthesized in the browser (Web Audio).
- * No MP3s to host. Edit the play* functions below to tweak; add a row to
- * HOST_SFX_BUTTONS to show a new button.
+ * Host soundboard.
+ * Prefers real files in /sfx/<id>.wav (see scripts/generate-sfx.mjs).
+ * Falls back to Web Audio synth if a file is missing.
+ * Add a button: HOST_SFX_BUTTONS + optional public/sfx file + optional PLAYERS entry.
  */
 
 export type HostSfxId =
@@ -233,13 +234,71 @@ const PLAYERS: Record<HostSfxId, (c: AudioContext) => void> = {
   ohh: playOhh,
 };
 
+const bufferCache = new Map<HostSfxId, AudioBuffer | null>();
+let preloadStarted = false;
+
+async function loadBuffer(
+  c: AudioContext,
+  id: HostSfxId
+): Promise<AudioBuffer | null> {
+  if (bufferCache.has(id)) return bufferCache.get(id) ?? null;
+  try {
+    const res = await fetch(`/sfx/${id}.wav`, { cache: "force-cache" });
+    if (!res.ok) {
+      bufferCache.set(id, null);
+      return null;
+    }
+    const arr = await res.arrayBuffer();
+    const buf = await c.decodeAudioData(arr.slice(0));
+    bufferCache.set(id, buf);
+    return buf;
+  } catch {
+    bufferCache.set(id, null);
+    return null;
+  }
+}
+
+/** Call once when host opens the board (after user gesture). */
+export async function preloadHostSfx(): Promise<void> {
+  if (preloadStarted) return;
+  preloadStarted = true;
+  const c = ac();
+  if (!c) return;
+  await c.resume().catch(() => undefined);
+  await Promise.all(HOST_SFX_BUTTONS.map((b) => loadBuffer(c, b.id)));
+}
+
+function playBuffer(c: AudioContext, buf: AudioBuffer) {
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const g = c.createGain();
+  g.gain.value = 0.9;
+  src.connect(g);
+  g.connect(c.destination);
+  src.start();
+}
+
 /** Play one board sound (host click or room broadcast). */
 export function playHostSfx(id: HostSfxId): void {
   const c = ac();
   if (!c) return;
   void c.resume().catch(() => undefined);
-  const fn = PLAYERS[id];
-  if (fn) fn(c);
+
+  const cached = bufferCache.get(id);
+  if (cached) {
+    playBuffer(c, cached);
+    return;
+  }
+
+  // Try load then play; synth fallback if missing
+  void loadBuffer(c, id).then((buf) => {
+    if (buf) {
+      playBuffer(c, buf);
+      return;
+    }
+    const fn = PLAYERS[id];
+    if (fn) fn(c);
+  });
 }
 
 export function isHostSfxId(v: string): v is HostSfxId {

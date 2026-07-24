@@ -12,6 +12,7 @@ import {
   submitQuestion,
   togglePanelMute,
 } from "@/lib/api";
+import { subscribeSpeaking } from "@/lib/speaking-bus";
 
 type Props = {
   roomId: string;
@@ -49,6 +50,17 @@ export function QuestionQueue({
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [speakingNames, setSpeakingNames] = useState<Set<string>>(new Set());
+  const [speakingLevels, setSpeakingLevels] = useState<Map<string, number>>(
+    new Map()
+  );
+
+  useEffect(() => {
+    return subscribeSpeaking((s) => {
+      setSpeakingNames(new Set(s.names));
+      setSpeakingLevels(new Map(s.levels));
+    });
+  }, []);
 
   useEffect(() => {
     setQuestions(initialQuestions);
@@ -231,6 +243,19 @@ export function QuestionQueue({
               <ul className="mt-2 flex flex-col gap-2">
                 {livePanel.map((r) => {
                   const muted = !!r.hostMuted;
+                  const name = r.authorName || "Guest";
+                  const isSpeaking =
+                    !muted &&
+                    (speakingNames.has(name) ||
+                      [...speakingNames].some(
+                        (n) => n.toLowerCase() === name.toLowerCase()
+                      ));
+                  const level =
+                    speakingLevels.get(name) ??
+                    [...speakingLevels.entries()].find(
+                      ([n]) => n.toLowerCase() === name.toLowerCase()
+                    )?.[1] ??
+                    0;
                   return (
                     <li
                       key={r.id}
@@ -242,15 +267,35 @@ export function QuestionQueue({
                         className={`min-h-12 min-w-[8rem] flex-1 rounded-xl border-2 px-3 py-2 text-left transition active:scale-[0.99] ${
                           muted
                             ? "border-zinc-400 bg-zinc-100 text-zinc-600 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300"
-                            : "border-emerald-500 bg-emerald-50 text-emerald-950 shadow-sm dark:border-emerald-400 dark:bg-emerald-950/50 dark:text-emerald-50"
+                            : isSpeaking
+                              ? "border-emerald-400 bg-emerald-200 shadow-md ring-2 ring-emerald-400/70 dark:border-emerald-300 dark:bg-emerald-800/70 dark:ring-emerald-400/50"
+                              : "border-emerald-500 bg-emerald-50 text-emerald-950 shadow-sm dark:border-emerald-400 dark:bg-emerald-950/50 dark:text-emerald-50"
                         }`}
                       >
                         <span className="block text-sm font-semibold">
-                          {r.authorName || "Guest"}
+                          {name}
+                          {isSpeaking ? " · speaking" : ""}
                         </span>
                         <span className="block text-xs font-medium opacity-80">
-                          {muted ? "Muted — tap to unmute" : "Live — tap to mute"}
+                          {muted
+                            ? "Muted — tap to unmute"
+                            : isSpeaking
+                              ? "Hot mic — tap to mute"
+                              : "Live — tap to mute"}
                         </span>
+                        {!muted && (
+                          <span
+                            className="mt-1 block h-1 overflow-hidden rounded-full bg-emerald-900/20 dark:bg-black/30"
+                            aria-hidden
+                          >
+                            <span
+                              className="block h-full rounded-full bg-emerald-600 transition-[width] duration-75 dark:bg-emerald-300"
+                              style={{
+                                width: `${Math.min(100, Math.round(level * 140))}%`,
+                              }}
+                            />
+                          </span>
+                        )}
                       </button>
                       <HostBtn
                         label="Remove"

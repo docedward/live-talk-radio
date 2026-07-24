@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   HOST_SFX_BUTTONS,
   playHostSfx,
+  preloadHostSfx,
   unlockHostSfx,
   type HostSfxId,
 } from "@/lib/host-sfx";
@@ -14,13 +15,17 @@ type Props = {
 };
 
 /**
- * Host-only pad: 6 browser-synthesized effects.
+ * Host-only pad: 6 effects (WAV in /sfx, synth fallback).
  * Plays immediately here, then tells the server so everyone else hears too.
  */
 export function HostSoundboard({ roomId }: Props) {
   const [busy, setBusy] = useState<HostSfxId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [last, setLast] = useState<string | null>(null);
+
+  useEffect(() => {
+    void unlockHostSfx().then(() => preloadHostSfx());
+  }, []);
 
   async function fire(id: HostSfxId, label: string) {
     setError(null);
@@ -44,7 +49,7 @@ export function HostSoundboard({ roomId }: Props) {
           Host soundboard
         </h2>
         <p className="text-xs text-amber-800/80 dark:text-amber-200/80">
-          Whole room hears these (browser sounds)
+          Whole room hears these
         </p>
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">

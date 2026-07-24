@@ -19,3 +19,6 @@ services:
         sync: false
       - key: LIVEKIT_API_SECRET
         sync: false
+      # After deploy: set to https://your-service.onrender.com so Share is always public
+      - key: PUBLIC_APP_URL
+        sync: false

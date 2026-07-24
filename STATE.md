@@ -3,27 +3,20 @@
 _Last updated: 2026-07-24_
 
 ## Goal
-Live Talk Radio: moderated text rooms **plus** live voice (host always; **speaker panel** of up to 5 guests On Air; others hear via LiveKit).
+Live Talk Radio: moderated text rooms + LiveKit voice panel (host + up to 5 guests), host tools (mute, soundboard), speaking feedback, public share.
 
 ## Done
-- Text MVP: rooms, join, chat, question queue, On Air request state machine
-- REST polling primary; Socket.io present but unused for fan-out
-- GitHub: https://github.com/docedward/live-talk-radio
-- Council of 5 verdict → LiveKit Cloud path
-- **Voice MVP (Phases 0–3):**
-  - Env load from `.env.local`; graceful voice-off if keys missing
-  - `POST /api/rooms/:id/voice-token` (LiveKit JWT; publish only for host or live guest)
-  - Snapshot `voice: { enabled, canPublish, url }` + `liveOnAir.isMe`
-  - `VoiceStage` (LiveKit): host mic, all subscribe, guest publish on On Air, clear revokes via re-token
-  - Homepage copy updated for live voice
-  - Phone path: tap-to-start voice, secure-context warning, `scripts/phone-tunnel.sh`, PHONE.md
-  - **Speaker panel:** host + up to 5 live guests; add / remove one / clear all
+- Text + voice MVP, multi-guest panel, one-way host mute
+- Phone HTTPS tunnel path, public share rewrite, stay-alive voice hardening
+- Host soundboard (6 IDs) via REST + LiveKit data; WAV assets in `public/sfx/`
+- Speaking strip (LiveKit active speakers + levels) + host panel pulse
+- Listener “You are live” / pending states
+- Council enhance verdict implemented (P1–P3; P0 Render still needs Dr. Ed account)
 
 ## Next
-- Phase 5: Render secrets + permanent URL
-- Optional: LiveKit RoomService `updateParticipant` for faster revoke
-- Optional: level meter / “who you’re hearing” strip
+- **P0 ops:** Deploy Render free web service, set LiveKit + `PUBLIC_APP_URL` secrets
+- Optional: replace WAV with higher-end licensed samples (same filenames)
+- Optional: host-only memberId on panel rows if name collisions
 
 ## Blockers
-- (none for local desktop if `.env.local` has LiveKit keys)
-- Phones need HTTPS tunnel while Mac hosts the app (see PHONE.md)
+- Permanent public URL needs Dr. Ed to click Render (or similar) once
