@@ -86,23 +86,24 @@ function guestHostMuted(state, memberId) {
   return !!(live && live.hostMuted);
 }
 
+/** Eligible for a LiveKit publish-capable token (host or on panel). Host mute does NOT remove this. */
 function memberCanPublish(state, memberId, role) {
   if (role === "host") return true;
-  if (!isLiveGuest(state, memberId)) return false;
-  // Host mute blocks publish even if still on panel
-  return !guestHostMuted(state, memberId);
+  return isLiveGuest(state, memberId);
 }
 
 function voiceInfo(state, memberId, role) {
   const enabled = isVoiceConfigured();
-  const onPanel =
-    role === "host" || isLiveGuest(state, memberId);
+  const onPanel = role === "host" || isLiveGuest(state, memberId);
   const hostMuted =
-    role === "listener" && isLiveGuest(state, memberId) && guestHostMuted(state, memberId);
-  const canPublish = enabled && memberCanPublish(state, memberId, role);
+    role === "listener" &&
+    isLiveGuest(state, memberId) &&
+    guestHostMuted(state, memberId);
+  // canPublish = may stay in LiveKit as a publisher identity (subscribe always works)
+  // hostMuted = one-way: stop their mic only; they still hear host
   return {
     enabled,
-    canPublish,
+    canPublish: enabled && memberCanPublish(state, memberId, role),
     url: enabled ? getLiveKitUrl() : "",
     hostMuted,
     onPanel: enabled && onPanel,
@@ -122,7 +123,7 @@ function getRoomService() {
   return new RoomServiceClient(livekitHttpHost(), apiKey, apiSecret);
 }
 
-/** Force LiveKit publish rights (host mute still works if their web UI timed out). */
+/** Drop someone from LiveKit publish rights entirely (remove from panel / leave). */
 async function livekitSetCanPublish(roomId, identity, canPublish) {
   const svc = getRoomService();
   if (!svc || !identity) return;
@@ -137,6 +138,37 @@ async function livekitSetCanPublish(roomId, identity, canPublish) {
   } catch (err) {
     console.warn(
       "LiveKit updateParticipant:",
+      err instanceof Error ? err.message : err
+    );
+  }
+}
+
+/**
+ * One-way mute: silence their mic tracks only. They keep canSubscribe so they still hear the host.
+ * (Revoking canPublish was reconnecting them and cutting what they heard.)
+ */
+async function livekitMuteGuestMic(roomId, identity, muted) {
+  const svc = getRoomService();
+  if (!svc || !identity) return;
+  const room = livekitRoomName(roomId);
+  try {
+    const info = await svc.getParticipant(room, identity);
+    for (const t of info.tracks || []) {
+      // TrackType.AUDIO = 0; skip pure video (type 1)
+      if (t.type === 1 || t.type === "VIDEO") continue;
+      if (!t.sid) continue;
+      try {
+        await svc.mutePublishedTrack(room, identity, t.sid, Boolean(muted));
+      } catch (err) {
+        console.warn(
+          "LiveKit mutePublishedTrack:",
+          err instanceof Error ? err.message : err
+        );
+      }
+    }
+  } catch (err) {
+    console.warn(
+      "LiveKit mute guest mic:",
       err instanceof Error ? err.message : err
     );
   }
@@ -494,8 +526,8 @@ function togglePanelMute(roomId, hostMemberId, requestId) {
     throw new Error("That person is not on the panel");
   }
   request.hostMuted = !request.hostMuted;
-  // LiveKit-side mute so it works even if their web page timed out
-  void livekitSetCanPublish(roomId, request.memberId, !request.hostMuted);
+  // One-way: mute their mic tracks only (they still hear host + room)
+  void livekitMuteGuestMic(roomId, request.memberId, request.hostMuted);
   return request;
 }
 

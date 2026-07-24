@@ -42,11 +42,16 @@ export interface OnAirRequest {
 export interface VoiceInfo {
   /** Server has LiveKit credentials configured. */
   enabled: boolean;
-  /** This session may publish audio (host, or any live panel guest). */
+  /**
+   * Eligible for mic publish rights in LiveKit (host or on panel).
+   * Stays true when host-muted so they keep hearing the room.
+   */
   canPublish: boolean;
   /** LiveKit WebSocket URL (public). */
   url: string;
-  /** Host has muted this guest’s mic (panel only). */
+  /**
+   * One-way host mute: their mic is off; they still hear host + room.
+   */
   hostMuted?: boolean;
   /** Guest is on the speaker panel (even if host-muted). */
   onPanel?: boolean;

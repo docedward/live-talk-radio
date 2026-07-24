@@ -70,11 +70,12 @@ export function VoiceStage({
     }
   }, [roomId]);
 
-  // After user starts, keep token in sync when On Air / host-mute flips.
+  // Refresh LiveKit token only when panel membership changes — NOT on host mute
+  // (reconnecting on mute was cutting their ability to hear the host).
   useEffect(() => {
     if (!enabled || !started) return;
     void refreshToken();
-  }, [enabled, started, canPublish, hostMuted, refreshToken]);
+  }, [enabled, started, canPublish, refreshToken]);
 
   if (!enabled) {
     return (
@@ -153,7 +154,8 @@ export function VoiceStage({
 
   return (
     <LiveKitRoom
-      key={`${roomId}-${tokenCanPublish ? "pub" : "sub"}-${token.slice(0, 24)}`}
+      // Stable key while on panel — host mute must not remount (that killed their subscribe audio)
+      key={`${roomId}-${tokenCanPublish ? "pub" : "sub"}`}
       token={token}
       serverUrl={url}
       connect
