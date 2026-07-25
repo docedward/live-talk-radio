@@ -236,10 +236,10 @@ export function QuestionQueue({
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
           Questions &amp; speaker panel
         </h2>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="radio-helper text-xs">
           {role === "host"
             ? `Approve questions. Tap a green name to mute/unmute (up to ${cap} guests).`
-            : "Choose: ask a question, or request to join the speaker panel."}
+            : "Ask a question, or tap Request On Air to join the speaker panel."}
         </p>
       </header>
 
@@ -542,7 +542,7 @@ export function QuestionQueue({
                 >
                   Request On Air
                 </button>
-                <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+                <p className="radio-helper mt-1.5 text-xs">
                   One tap sends the request to the host. Optional: type a short
                   topic above first.
                 </p>
@@ -569,7 +569,7 @@ export function QuestionQueue({
                 Ask
               </button>
             </form>
-            <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="radio-helper mt-1.5 text-xs">
               As host you can still type a question into the queue for notes.
             </p>
           </>

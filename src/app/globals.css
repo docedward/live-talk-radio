@@ -412,6 +412,37 @@ body {
 
 /* ─── Theme helpers for app content ─── */
 
+/* High-contrast helpers (never pale yellow on cream glass) */
+.radio-readable {
+  color: #2a1c12 !important;
+}
+.radio-readable-muted {
+  color: #4a3728 !important;
+}
+.radio-helper {
+  color: #3d2a1a !important;
+  font-weight: 500;
+}
+
+@keyframes trl-float-up {
+  0% {
+    transform: translateY(0) scale(0.8);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-4.5rem) scale(1.15);
+    opacity: 0;
+  }
+}
+
+.trl-emote-float {
+  animation: trl-float-up 1.5s ease-out forwards;
+  pointer-events: none;
+}
+
 .radio-screen h1,
 .radio-screen h2,
 .radio-heading {

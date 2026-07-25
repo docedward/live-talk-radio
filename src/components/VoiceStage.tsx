@@ -12,6 +12,7 @@ import {
   ConnectionState,
   Room,
   RoomEvent,
+  Track,
   DefaultReconnectPolicy,
 } from "livekit-client";
 import { fetchVoiceToken } from "@/lib/api";
@@ -24,6 +25,8 @@ import {
   toggleRoomOutputMuted,
   unlockRoomAudio,
 } from "@/lib/room-audio";
+import { setClipPublisher } from "@/lib/clip-publish-bus";
+import { receiveEmote, setEmoteSender } from "@/lib/emote-bus";
 import { SpeakingStrip } from "./SpeakingStrip";
 
 type Props = {
@@ -253,6 +256,8 @@ export function VoiceStage({
       >
         <RoomAudioRenderer />
         <LiveKitSfxListener />
+        <ClipPublisherBridge canPublish={tokenCanPublish} />
+        <EmoteDataBridge />
         <VoiceKeepAlive
           roomId={roomId}
           canPublish={tokenCanPublish}
@@ -272,6 +277,105 @@ export function VoiceStage({
       </LiveKitRoom>
     </div>
   );
+}
+
+/**
+ * Registers a LiveKit publisher so Host Clip Board can inject prerecorded
+ * audio into the room (outside the LiveKitRoom React tree).
+ */
+function ClipPublisherBridge({ canPublish }: { canPublish: boolean }) {
+  const { localParticipant } = useLocalParticipant();
+  const connectionState = useConnectionState();
+  const connected = connectionState === ConnectionState.Connected;
+
+  useEffect(() => {
+    if (!canPublish || !connected || !localParticipant) {
+      setClipPublisher(null);
+      return;
+    }
+
+    setClipPublisher(async (buffer: AudioBuffer) => {
+      const AC =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
+      if (!AC) throw new Error("Web Audio not supported");
+      const ac = new AC();
+      await ac.resume().catch(() => undefined);
+
+      const dest = ac.createMediaStreamDestination();
+      const src = ac.createBufferSource();
+      // Resample into context rate if needed via OfflineAudioContext path
+      let playBuf = buffer;
+      if (buffer.sampleRate !== ac.sampleRate) {
+        const frames = Math.ceil(
+          buffer.duration * ac.sampleRate
+        );
+        const offline = new OfflineAudioContext(1, frames, ac.sampleRate);
+        const ob = offline.createBuffer(
+          1,
+          buffer.length,
+          buffer.sampleRate
+        );
+        ob.copyToChannel(buffer.getChannelData(0), 0);
+        const os = offline.createBufferSource();
+        os.buffer = ob;
+        os.connect(offline.destination);
+        os.start();
+        playBuf = await offline.startRendering();
+      }
+
+      src.buffer = playBuf;
+      const g = ac.createGain();
+      g.gain.value = 0.95;
+      src.connect(g);
+      g.connect(dest);
+      // Host monitors locally (room mix may not loop back)
+      g.connect(ac.destination);
+
+      const mediaTrack = dest.stream.getAudioTracks()[0];
+      if (!mediaTrack) {
+        void ac.close().catch(() => undefined);
+        throw new Error("Could not create clip track");
+      }
+
+      const publication = await localParticipant.publishTrack(mediaTrack, {
+        name: "trl-clip",
+        source: Track.Source.Unknown,
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        src.onended = () => resolve();
+        try {
+          src.start();
+        } catch (err) {
+          reject(err);
+        }
+      });
+
+      try {
+        if (publication?.track) {
+          await localParticipant.unpublishTrack(publication.track);
+        } else {
+          await localParticipant.unpublishTrack(mediaTrack);
+        }
+      } catch {
+        /* ignore */
+      }
+      try {
+        mediaTrack.stop();
+      } catch {
+        /* ignore */
+      }
+      void ac.close().catch(() => undefined);
+    });
+
+    return () => {
+      setClipPublisher(null);
+    };
+  }, [canPublish, connected, localParticipant]);
+
+  return null;
 }
 
 /** Keep control session + audio alive across sleep / background / blips. */
@@ -360,13 +464,20 @@ function LiveKitSfxListener() {
       _kind?: unknown,
       topic?: string
     ) => {
-      if (topic && topic !== "trl-sfx") return;
+      if (topic && topic !== "trl-sfx" && topic !== "trl-emote") return;
       try {
         const msg = JSON.parse(new TextDecoder().decode(payload)) as {
           type?: string;
           sound?: string;
           id?: string;
+          emoji?: string;
+          from?: string;
         };
+        if (msg.type === "emote" && msg.emoji) {
+          receiveEmote(msg.emoji, msg.from || "guest");
+          return;
+        }
+        if (topic === "trl-emote") return;
         if (msg.type !== "sfx" || !msg.sound || !isHostSfxId(msg.sound)) return;
         const sound = msg.sound;
         if (msg.id && seen.current.has(msg.id)) return;
@@ -388,6 +499,37 @@ function LiveKitSfxListener() {
       room.off(RoomEvent.DataReceived, onData);
     };
   }, [room]);
+
+  return null;
+}
+
+/** Publishes room emotes on LiveKit data channel. */
+function EmoteDataBridge() {
+  const room = useRoomContext();
+  const connectionState = useConnectionState();
+  const connected = connectionState === ConnectionState.Connected;
+
+  useEffect(() => {
+    if (!room || !connected) {
+      setEmoteSender(null);
+      return;
+    }
+    setEmoteSender(async (emoji: string) => {
+      const payload = new TextEncoder().encode(
+        JSON.stringify({
+          type: "emote",
+          emoji,
+          from: room.localParticipant.name || "guest",
+          id: crypto.randomUUID?.() || String(Date.now()),
+        })
+      );
+      await room.localParticipant.publishData(payload, {
+        reliable: true,
+        topic: "trl-emote",
+      });
+    });
+    return () => setEmoteSender(null);
+  }, [room, connected]);
 
   return null;
 }

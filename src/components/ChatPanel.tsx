@@ -190,7 +190,7 @@ export function ChatPanel({ roomId, initialMessages }: Props) {
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
           Live chat
         </h2>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="radio-helper text-xs">
           Casual talk — questions go in the queue on the right.
         </p>
       </header>

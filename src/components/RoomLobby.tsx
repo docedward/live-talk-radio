@@ -21,6 +21,7 @@ import { RoomSfxPlayer } from "./RoomSfxPlayer";
 import { VoiceStage } from "./VoiceStage";
 import { CardAvatarPicker } from "./CardAvatarPicker";
 import { PlayingCard } from "./PlayingCard";
+import { EmoteRail } from "./EmoteRail";
 import { unlockRoomAudio } from "@/lib/room-audio";
 
 type Props = {
@@ -80,6 +81,8 @@ export function RoomLobby({ roomId }: Props) {
   const [controlNote, setControlNote] = useState<string | null>(null);
   /** Always-visible share URL in sticky bar (host doesn't scroll for it). */
   const [roomLink, setRoomLink] = useState<string | null>(null);
+  /** Listen mode: compact radio face (listeners). Host always full. */
+  const [listenMode, setListenMode] = useState(false);
 
   // Client-only boot: localStorage is never read during SSR
   useEffect(() => {
@@ -91,6 +94,15 @@ export function RoomLobby({ roomId }: Props) {
     const saved =
       (creds?.avatarId as CardId | undefined) || loadSavedAvatar() || pickFreeCard([]);
     setAvatarId(saved);
+    try {
+      const q = new URLSearchParams(window.location.search);
+      if (q.get("mode") === "listen") setListenMode(true);
+      else if (sessionStorage.getItem(`ltr-listen-${roomId}`) === "1") {
+        setListenMode(true);
+      }
+    } catch {
+      /* ignore */
+    }
     setBooted(true);
   }, [roomId]);
 
@@ -419,6 +431,17 @@ export function RoomLobby({ roomId }: Props) {
     livePanel.some(
       (r) => r.isMe === true || r.authorName === displayName
     );
+  // Host never forced into listen mode; listeners can compact
+  const compact = !isHost && listenMode;
+
+  function setListen(next: boolean) {
+    setListenMode(next);
+    try {
+      sessionStorage.setItem(`ltr-listen-${roomId}`, next ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 pb-10 pt-0 sm:pt-6">
@@ -440,17 +463,29 @@ export function RoomLobby({ roomId }: Props) {
               <span className="radio-lcd truncate tracking-wide">
                 {isHost ? "HOST" : "LISTENER"}
                 {displayName ? ` · ${displayName}` : ""}
+                {compact ? " · LISTEN" : ""}
               </span>
             </p>
           </div>
           <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row">
-            <button
-              type="button"
-              onClick={() => void shareOrCopyLink()}
-              className="min-h-11 rounded-xl bg-[#9a3f1c] px-3 py-2.5 text-sm font-semibold text-[#fff8f0] shadow-sm hover:bg-[#b34d24] active:bg-[#7a3216] sm:px-4"
-            >
-              Share
-            </button>
+            {!isHost && (
+              <button
+                type="button"
+                onClick={() => setListen(!compact)}
+                className="min-h-11 rounded-xl border border-[#8b3a1a] bg-[#f3e0c8] px-3 py-2.5 text-sm font-semibold text-[#5c2814] hover:bg-[#e8d0b0] sm:px-4"
+              >
+                {compact ? "Full tools" : "Just listen"}
+              </button>
+            )}
+            {!compact && (
+              <button
+                type="button"
+                onClick={() => void shareOrCopyLink()}
+                className="min-h-11 rounded-xl bg-[#9a3f1c] px-3 py-2.5 text-sm font-semibold text-[#fff8f0] shadow-sm hover:bg-[#b34d24] active:bg-[#7a3216] sm:px-4"
+              >
+                Share
+              </button>
+            )}
             <button
               type="button"
               disabled={exiting}
@@ -462,38 +497,40 @@ export function RoomLobby({ roomId }: Props) {
           </div>
         </div>
 
-        <div className="mt-2 flex items-stretch gap-1.5">
-          <label className="sr-only" htmlFor="room-host-link">
-            Guest join link
-          </label>
-          <input
-            id="room-host-link"
-            readOnly
-            value={roomLink || "Loading link…"}
-            onFocus={(e) => e.currentTarget.select()}
-            onClick={(e) => e.currentTarget.select()}
-            className="radio-lcd min-w-0 flex-1 rounded-lg border border-[#d4c4a8] bg-[#fffdf8] px-2.5 py-2 text-[0.7rem] leading-snug tracking-wide text-[#1c1410] outline-none ring-[#c47a10] focus:ring-2 sm:text-xs"
-          />
-          <button
-            type="button"
-            onClick={() => void copyRoomLink()}
-            className="shrink-0 rounded-lg border border-[#d4c4a8] bg-[#f3e0c8] px-3 py-2 text-xs font-semibold text-[#5c2814] hover:bg-[#e8d0b0] active:bg-[#dcc09a]"
-          >
-            Copy
-          </button>
-        </div>
-        {shareNote && (
+        {!compact && (
+          <div className="mt-2 flex items-stretch gap-1.5">
+            <label className="sr-only" htmlFor="room-host-link">
+              Guest join link
+            </label>
+            <input
+              id="room-host-link"
+              readOnly
+              value={roomLink || "Loading link…"}
+              onFocus={(e) => e.currentTarget.select()}
+              onClick={(e) => e.currentTarget.select()}
+              className="radio-lcd min-w-0 flex-1 rounded-lg border border-[#d4c4a8] bg-[#fffdf8] px-2.5 py-2 text-[0.7rem] leading-snug tracking-wide text-[#1c1410] outline-none ring-[#c47a10] focus:ring-2 sm:text-xs"
+            />
+            <button
+              type="button"
+              onClick={() => void copyRoomLink()}
+              className="shrink-0 rounded-lg border border-[#d4c4a8] bg-[#f3e0c8] px-3 py-2 text-xs font-semibold text-[#5c2814] hover:bg-[#e8d0b0] active:bg-[#dcc09a]"
+            >
+              Copy
+            </button>
+          </div>
+        )}
+        {shareNote && !compact && (
           <p className="mt-1.5 break-all text-xs text-emerald-800">
             {shareNote}
           </p>
         )}
       </div>
 
-      {isHost && (
+      {isHost && !compact && (
         <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900 dark:border-violet-900 dark:bg-violet-950/50 dark:text-violet-100">
           <strong>Host controls are on.</strong> Approve questions. Add
           listeners to the <strong>speaker panel</strong> (up to {panelCap}{" "}
-          guests + you). Remove one or clear the whole panel anytime.
+          guests + you). Clip board = prerecords/ads (hold pad to upload).
         </div>
       )}
 
@@ -526,28 +563,41 @@ export function RoomLobby({ roomId }: Props) {
         hostMuted={hostMuted}
       />
 
-      <PresenceSfx
-        presence={snapshot.presence}
-        myName={displayName || "Guest"}
-        myRole={snapshot.role}
-      />
+      <EmoteRail />
 
-      <PresencePanel
-        presence={snapshot.presence}
-        listenerCount={snapshot.listenerCount}
-      />
+      {compact && (
+        <p className="text-center text-sm text-[#4a3728]">
+          Just listening. Tap <strong>Full tools</strong> for chat, questions,
+          and On Air.
+        </p>
+      )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ChatPanel roomId={roomId} initialMessages={snapshot.messages} />
-        <QuestionQueue
-          roomId={roomId}
-          role={snapshot.role}
-          initialQuestions={snapshot.questions}
-          initialOnAirRequests={snapshot.onAirRequests}
-          initialLivePanel={livePanel}
-          panelCap={panelCap}
-        />
-      </div>
+      {!compact && (
+        <>
+          <PresenceSfx
+            presence={snapshot.presence}
+            myName={displayName || "Guest"}
+            myRole={snapshot.role}
+          />
+
+          <PresencePanel
+            presence={snapshot.presence}
+            listenerCount={snapshot.listenerCount}
+          />
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <ChatPanel roomId={roomId} initialMessages={snapshot.messages} />
+            <QuestionQueue
+              roomId={roomId}
+              role={snapshot.role}
+              initialQuestions={snapshot.questions}
+              initialOnAirRequests={snapshot.onAirRequests}
+              initialLivePanel={livePanel}
+              panelCap={panelCap}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }
