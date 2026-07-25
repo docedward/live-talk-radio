@@ -30,13 +30,14 @@ export const HOST_SFX_BUTTONS: HostSfxButton[] = [
   { id: "pew", label: "Pew Pew", emoji: "🔫" },
   { id: "horn", label: "Horn", emoji: "📢" },
   { id: "asmr", label: "ASMR", emoji: "🎧" },
-  { id: "riser", label: "Riser", emoji: "📈" },
-  { id: "pop", label: "Pop", emoji: "🫧" },
-  { id: "funny", label: "Funny", emoji: "🚨" },
-  { id: "meme", label: "Meme", emoji: "😏" },
-  { id: "alert", label: "Alert", emoji: "⚠️" },
-  { id: "laugh", label: "Laugh", emoji: "😂" },
-  { id: "popwow", label: "Wow", emoji: "💥" },
+  { id: "riser", label: "Riser", emoji: "🎢" },
+  // Pads swapped from ~/GrokBox/inputs/sfx (Pixabay downloads)
+  { id: "pop", label: "Pop", emoji: "☀️" },
+  { id: "funny", label: "Funny", emoji: "🤡" },
+  { id: "meme", label: "Meme", emoji: "👀" },
+  { id: "alert", label: "Alert", emoji: "🚨" },
+  { id: "laugh", label: "Laugh", emoji: "🤣" },
+  { id: "popwow", label: "Wow", emoji: "😮" },
   { id: "ghost", label: "Ghost", emoji: "👻" },
 ];
 

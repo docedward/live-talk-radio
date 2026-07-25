@@ -1,32 +1,22 @@
-TRL host soundboard sources (2026-07-25 rebuild)
-================================================
+TRL host soundboard sources
+===========================
 
-Trimmed to ≤ ~1.8s mono WAV for room stings. Previews used where full
-download required login; free CDN previews from Freesound.
+Trimmed to ≤ ~1.8s mono WAV for room stings.
 
-Exact user Freesound picks
---------------------------
-- Pew Pew: OBXJohn https://freesound.org/people/OBXJohn/sounds/365636/
-- Horn: Greg Baumont https://freesound.org/people/Greg%20Baumont/sounds/53711/
-- ASMR: harrisonlace https://freesound.org/people/harrisonlace/sounds/771954/
+From Dr. Ed drop folder ~/GrokBox/inputs/sfx/ (Pixabay downloads)
+-----------------------------------------------------------------
+- funny.wav  ← 3dabrar-funny-alarm-317531.mp3
+- alert.wav  ← alexis_gaming_cam-alerte-346112.mp3
+- laugh.wav  ← freesound_community-sooo-funny-82640.mp3
+- pop.wav    ← jonasblakewood-summer-pop-dance-569731.mp3
+- meme.wav   ← shelvis_makes_games-sus-meme-sound-181271.mp3
+- popwow.wav ← shrek_30-pop-wow-323262.mp3
+- ghost.wav  ← u_a7pk5xrn16-waterphone-174768.mp3
 
-User-requested Pixabay pages (Cloudflare blocked automated download)
---------------------------------------------------------------------
-We used free Freesound substitutes matching the requested *character*
-(riser, pop, funny alarm, meme, alert, laugh, wow, ghost/waterphone).
-If you download the exact Pixabay files into inputs/, we can re-swap 1:1.
+Pixabay Content License applies to those originals; see pixabay.com/service/license-summary/
 
-- Applause: Freesound short applause (user link was a tag search, not a sound)
-  https://freesound.org/s/339809/
-- Riser: https://freesound.org/s/413476/ (cinematic-style rise)
-- Pop: https://freesound.org/s/257232/
-- Funny: https://freesound.org/s/428156/ (alarm-ish funny sting)
-- Meme: https://freesound.org/s/397355/
-- Alert: https://freesound.org/s/411089/
-- Laugh: https://freesound.org/s/316920/
-- Wow (2nd Pop): https://freesound.org/s/253886/
-- Ghost: https://freesound.org/s/162465/ (waterphone-adjacent spook)
+Not in inputs/ — kept prior free substitutes
+--------------------------------------------
+- applause, pew, horn, asmr, riser (Freesound CDN previews; see git history)
 
-Licenses are those of the individual Freesound authors (typically CC0 or
-CC-BY). Check each sound page for attribution requirements if you
-redistribute commercially.
+Drop matching files named applause/pew/horn/asmr/riser to replace those too.
