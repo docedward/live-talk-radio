@@ -397,7 +397,7 @@ function triggerSfx(roomId, hostMemberId, sound) {
 
 function joinRoom(roomId, memberId, displayName, hostToken, avatarId) {
   const state = rooms.get(roomId);
-  if (!state) throw new Error("Room not found");
+  if (!state) throw new Error("Show not found or has ended");
 
   const name = String(displayName || "").trim().slice(0, 40) || "Guest";
   const role =
@@ -462,20 +462,79 @@ function pruneStaleMembers(state) {
   }
 }
 
+/**
+ * Leave the show but keep it open.
+ * If the host leaves, promote the first live panel guest to host so the show
+ * can continue without the original host.
+ */
 function leaveRoom(roomId, memberId) {
   const state = rooms.get(roomId);
   if (!state) return;
+  const leaving = state.members.get(memberId);
+  const wasHost = leaving?.role === "host";
   endLiveForMember(state, memberId);
   state.members.delete(memberId);
-  // Best-effort stop their LiveKit publish
   void livekitSetCanPublish(roomId, memberId, false);
+
+  if (wasHost) {
+    promotePanelHost(state);
+  }
+}
+
+/** First live panelist becomes host (if still in the room). */
+function promotePanelHost(state) {
+  const live = livePanelRequests(state);
+  for (const r of live) {
+    const m = state.members.get(r.memberId);
+    if (m && m.role !== "host") {
+      m.role = "host";
+      // Keep them live on panel so they can still speak
+      return m;
+    }
+  }
+  // No panelist — show stays open for listeners (no host tools until someone
+  // rejoins with the original hostToken).
+  return null;
+}
+
+/**
+ * Host ends the show for everyone. Room is removed — no new joins.
+ */
+function endShow(roomId, hostMemberId) {
+  const { state } = requireHostMember(roomId, hostMemberId);
+  // Drop panel publishes best-effort
+  for (const r of livePanelRequests(state)) {
+    void livekitSetCanPublish(roomId, r.memberId, false);
+  }
+  for (const [id, m] of state.members.entries()) {
+    if (m.role === "host" || true) {
+      void livekitSetCanPublish(roomId, id, false);
+    }
+  }
+  rooms.delete(roomId);
+  // Best-effort tear down LiveKit room
+  void livekitDeleteRoom(roomId);
+  return { ended: true };
+}
+
+async function livekitDeleteRoom(roomId) {
+  const svc = getRoomService();
+  if (!svc) return;
+  try {
+    await svc.deleteRoom(livekitRoomName(roomId));
+  } catch (err) {
+    console.warn(
+      "LiveKit deleteRoom:",
+      err instanceof Error ? err.message : err
+    );
+  }
 }
 
 function requireMember(roomId, memberId) {
   const state = rooms.get(roomId);
-  if (!state) throw new Error("Room not found");
+  if (!state) throw new Error("Show has ended");
   const member = state.members.get(memberId);
-  if (!member) throw new Error("You are not in this room — join first");
+  if (!member) throw new Error("You are not in this show — join first");
   touchMember(roomId, memberId);
   return { state, member };
 }
@@ -964,13 +1023,23 @@ async function handleApi(req, res, pathname, query, bodyPromise) {
       return true;
     }
 
-    // POST /api/rooms/:id/leave — tab close / explicit leave
+    // POST /api/rooms/:id/leave — exit (show continues)
     const leaveMatch = pathname.match(/^\/api\/rooms\/([^/]+)\/leave$/);
     if (leaveMatch && req.method === "POST") {
       const roomId = decodeURIComponent(leaveMatch[1]);
       const memberId = sessionIdFrom(req, body, query);
       leaveRoom(roomId, memberId);
       sendJson(res, 200, { ok: true });
+      return true;
+    }
+
+    // POST /api/rooms/:id/end — host ends show for everyone
+    const endMatch = pathname.match(/^\/api\/rooms\/([^/]+)\/end$/);
+    if (endMatch && req.method === "POST") {
+      const roomId = decodeURIComponent(endMatch[1]);
+      const memberId = sessionIdFrom(req, body, query);
+      endShow(roomId, memberId);
+      sendJson(res, 200, { ok: true, ended: true });
       return true;
     }
 

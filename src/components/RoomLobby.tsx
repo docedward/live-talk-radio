@@ -10,6 +10,7 @@ import {
   joinRoom,
   leaveRoom,
   leaveRoomBeacon,
+  endShow,
 } from "@/lib/api";
 import { pickFreeCard, type CardId } from "@/lib/card-avatars";
 import { ChatPanel } from "./ChatPanel";
@@ -90,6 +91,7 @@ export function RoomLobby({ roomId }: Props) {
   const [faqBlink, setFaqBlink] = useState(false);
   /** Chat demoted — collapsed by default (panel-first). */
   const [chatOpen, setChatOpen] = useState(false);
+  const [showEnded, setShowEnded] = useState(false);
 
   // Client-only boot: localStorage is never read during SSR
   useEffect(() => {
@@ -160,13 +162,18 @@ export function RoomLobby({ roomId }: Props) {
       } catch (err) {
         const msg = err instanceof Error ? err.message : "";
         // Session dropped from server (stale) but user still on page / in LiveKit
-        if (
-          /not in this room|join first|Room not found/i.test(msg)
+        if (/show has ended|show not found|room not found/i.test(msg)) {
+          if (!cancelled) {
+            setShowEnded(true);
+            setSnapshot(null);
+          }
+        } else if (
+          /not in this (room|show)|join first/i.test(msg)
         ) {
           await rejoinControl();
         } else if (!cancelled) {
           setControlNote(
-            "Reconnecting room controls… (voice may still work)"
+            "Reconnecting show controls… (voice may still work)"
           );
         }
       }
@@ -329,7 +336,10 @@ export function RoomLobby({ roomId }: Props) {
     await copyRoomLink();
   }
 
-  /** Leave room fully and go home (host or listener). */
+  /**
+   * Exit: leave the show; it stays open.
+   * Host exit promotes a live panel member to host when possible.
+   */
   async function exitRoom() {
     if (exiting) return;
     setExiting(true);
@@ -337,7 +347,26 @@ export function RoomLobby({ roomId }: Props) {
     try {
       await leaveRoom(roomId);
     } catch {
-      /* still navigate home even if leave API fails */
+      /* still navigate home */
+    }
+    // Keep hostToken in localStorage so the original host can rejoin as host
+    // if no panelist was promoted / they return later.
+    router.push("/");
+  }
+
+  /** Host only: end show for everyone — removed from open shows, not joinable. */
+  async function endShowForAll() {
+    if (exiting) return;
+    const ok = window.confirm(
+      "End this show for everyone? People cannot rejoin this show link."
+    );
+    if (!ok) return;
+    setExiting(true);
+    setError(null);
+    try {
+      await endShow(roomId);
+    } catch {
+      /* still leave UI */
     }
     try {
       localStorage.removeItem(`ltr-host-${roomId}`);
@@ -349,6 +378,30 @@ export function RoomLobby({ roomId }: Props) {
 
   // Same join UI on server + first client paint (empty name until boot finishes)
   if (!snapshot) {
+    if (showEnded) {
+      return (
+        <div className="mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-10">
+          <div className="rounded-2xl border border-[#d4c4a8] bg-[#fffdf8] p-6 text-center shadow-sm">
+            <p className="radio-lcd text-[0.65rem] uppercase tracking-[0.2em] text-[#8b3a1a]">
+              Live only
+            </p>
+            <h1 className="mt-2 text-2xl tracking-wide text-[#1c1410]">
+              This show has ended
+            </h1>
+            <p className="mt-2 text-sm text-[#4a3728]">
+              The host closed the booth. Nothing was recorded.
+            </p>
+            <Link
+              href="/"
+              className="mt-6 inline-flex min-h-11 items-center justify-center rounded-xl bg-[#9a3f1c] px-4 text-sm font-semibold text-white"
+            >
+              Back to shows
+            </Link>
+          </div>
+        </div>
+      );
+    }
+
     const nameReady = displayName.trim().length > 0;
     // Only block while an in-flight join is running — never because of boot/name.
     // Empty name → "Guest" (server already accepts that). Old phones often never
@@ -544,13 +597,29 @@ export function RoomLobby({ roomId }: Props) {
             >
               FAQ
             </button>
+            {isHost && (
+              <button
+                type="button"
+                disabled={exiting}
+                onClick={() => void endShowForAll()}
+                className="min-h-11 rounded-xl border border-red-700 bg-red-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50 sm:px-4"
+                title="Close the show for everyone — link no longer works"
+              >
+                {exiting ? "…" : "End show"}
+              </button>
+            )}
             <button
               type="button"
               disabled={exiting}
               onClick={() => void exitRoom()}
               className="min-h-11 rounded-xl border border-[#8b3a1a] bg-white px-3 py-2.5 text-sm font-semibold text-[#8b3a1a] hover:bg-[#fff8f0] disabled:opacity-50 sm:px-4"
+              title={
+                isHost
+                  ? "Leave but keep the show open (panel can continue)"
+                  : "Leave the show"
+              }
             >
-              {exiting ? "Leaving…" : "Exit show"}
+              {exiting ? "Leaving…" : "Exit"}
             </button>
           </div>
         </div>

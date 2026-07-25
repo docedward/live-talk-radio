@@ -212,10 +212,18 @@ export function triggerRoomSfx(roomId: string, sound: string) {
   );
 }
 
-/** Leave room (also used via sendBeacon on tab close). */
+/** Leave show (show continues; host exit may promote a panelist). */
 export function leaveRoom(roomId: string) {
   return api<{ ok: true }>(
     `/api/rooms/${encodeURIComponent(roomId)}/leave`,
+    { method: "POST", body: JSON.stringify({}) }
+  );
+}
+
+/** Host: end show for everyone — no longer joinable. */
+export function endShow(roomId: string) {
+  return api<{ ok: true; ended: true }>(
+    `/api/rooms/${encodeURIComponent(roomId)}/end`,
     { method: "POST", body: JSON.stringify({}) }
   );
 }

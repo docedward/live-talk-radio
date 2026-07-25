@@ -87,7 +87,7 @@ export function RoomFaq({ open, onClose, role = "listener" }: Props) {
               "Clip board: hold a pad to upload an ad or clip. You can talk over it.",
               "Show board: optional “this week” note and day-of cancel/late notice.",
               "Tap a green panel name to mute or unmute. Remove drops them.",
-              "Exit when the show ends. The live booth is gone — that is on purpose.",
+              "Exit leaves the show open (a panel member may become host). End show closes it for everyone.",
             ]}
           />
 
