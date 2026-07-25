@@ -26,6 +26,7 @@ import {
   subscribeClipPlaying,
   subscribeClipPublisherReady,
 } from "@/lib/clip-publish-bus";
+import { markSfxEventPlayed, noteHostLocalSfxPlay } from "@/lib/sfx-dedupe";
 
 type Props = {
   roomId: string;
@@ -74,14 +75,15 @@ export function HostSoundboard({ roomId }: Props) {
     setBusy(id);
     await unlockRoomAudio();
     await unlockHostSfx();
+    // Suppress LiveKit/REST echo of this press (server data has no isLocal)
+    noteHostLocalSfxPlay();
     const heard = await playHostSfx(id);
     if (!heard) {
-      setError(
-        "Could not play — check Mute under Live sound, or try again."
-      );
+      setError("Could not play. Check Mute under Live sound.");
     }
     try {
-      await triggerRoomSfx(roomId, id);
+      const res = await triggerRoomSfx(roomId, id);
+      markSfxEventPlayed(res.lastSfx?.id);
       setLast(label);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not send sound");
@@ -187,11 +189,11 @@ export function HostSoundboard({ roomId }: Props) {
       />
 
       <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-1">
-        <h2 className="text-sm font-semibold text-amber-950 dark:text-amber-100">
+        <h2 className="text-sm font-semibold text-[#1c1410]">
           Host soundboard
         </h2>
         <p className="radio-helper text-[11px]">
-          Only you press · everyone hears
+          Only you press. Everyone hears.
         </p>
       </div>
 
@@ -219,7 +221,7 @@ export function HostSoundboard({ roomId }: Props) {
       <div className="mt-3 border-t border-amber-200/80 pt-2 dark:border-amber-900">
         <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-950 dark:text-amber-100">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-[#1c1410]">
               Clip board · ads &amp; prerecords
             </h3>
             <p className="radio-helper mt-0.5 text-[10px]">

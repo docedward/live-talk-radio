@@ -14,23 +14,20 @@ import {
   subscribeRoomAudio,
   unlockRoomAudio,
 } from "@/lib/room-audio";
+import { claimSfxEventId, hasPlayedSfxEvent } from "@/lib/sfx-dedupe";
 
 type Props = {
   roomId: string;
-  /** Latest board cue from the parent snapshot (or null). */
   lastSfx: RoomSfxEvent | null | undefined;
-  /** Host already played on button press — skip double-play. */
+  /** Host already played on pad press — skip REST/LiveKit echo. */
   isHost: boolean;
 };
 
 /**
- * Playback only — no enable buttons, no pads.
- * Host fires on HostSoundboard; server broadcasts lastSfx;
- * this plays cues for everyone (honors room Mute).
- * Unlock happens on Join / first gesture via room-audio.
+ * Listeners hear host board cues via lastSfx (REST) and/or LiveKit data.
+ * Deduped globally so we never multi-fire one event id.
  */
 export function RoomSfxPlayer({ roomId, lastSfx, isHost }: Props) {
-  const playedId = useRef<string | null>(null);
   const readyRef = useRef(isRoomAudioUnlocked());
 
   useEffect(() => {
@@ -39,7 +36,6 @@ export function RoomSfxPlayer({ roomId, lastSfx, isHost }: Props) {
     });
   }, []);
 
-  // Soft unlock if join already unlocked, or first pointer/key anywhere
   useEffect(() => {
     if (isRoomAudioUnlocked()) {
       void unlockHostSfx();
@@ -58,35 +54,24 @@ export function RoomSfxPlayer({ roomId, lastSfx, isHost }: Props) {
 
   async function maybePlay(event: RoomSfxEvent | null | undefined) {
     if (!event?.id || !event.sound) return;
-    if (playedId.current === event.id) return;
     if (!isHostSfxId(event.sound)) return;
-    if (isRoomOutputMuted()) {
-      // Still mark as seen so we don't blast a backlog after unmute
-      playedId.current = event.id;
-      return;
-    }
+    // Host already played locally and marked the id in HostSoundboard
+    if (isHost) return;
+    if (hasPlayedSfxEvent(event.id)) return;
+    if (!claimSfxEventId(event.id)) return;
 
-    // Host already played on pad press — don't double
-    if (isHost && Date.now() - event.at < 2500) {
-      playedId.current = event.id;
-      return;
-    }
+    if (isRoomOutputMuted()) return;
 
-    // Try play; unlock may have come from Join
     if (!isRoomAudioUnlocked()) {
       await unlockRoomAudio();
     }
-
-    const ok = await playHostSfx(event.sound);
-    if (ok || isRoomAudioUnlocked()) {
-      playedId.current = event.id;
-    }
+    await playHostSfx(event.sound);
   }
 
   useEffect(() => {
     void maybePlay(lastSfx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastSfx, isHost]);
+  }, [lastSfx?.id, isHost]);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,7 +84,8 @@ export function RoomSfxPlayer({ roomId, lastSfx, isHost }: Props) {
         /* ignore */
       }
     }
-    const id = setInterval(tick, 500);
+    // Slower poll — LiveKit data is primary; REST is backup only
+    const id = setInterval(tick, 1500);
     return () => {
       cancelled = true;
       clearInterval(id);
@@ -107,6 +93,5 @@ export function RoomSfxPlayer({ roomId, lastSfx, isHost }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, isHost]);
 
-  // Headless — Mute lives on the voice strip
   return null;
 }

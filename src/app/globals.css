@@ -424,6 +424,26 @@ body {
   font-weight: 500;
 }
 
+/* Section titles on cream glass — never pale yellow / amber-100 */
+.radio-screen h2,
+.radio-screen h3,
+.radio-screen .text-amber-100,
+.radio-screen .text-amber-200,
+.radio-screen .text-amber-300,
+.radio-screen .dark\:text-amber-100,
+.radio-screen .dark\:text-amber-200,
+.radio-screen .dark\:text-amber-300 {
+  color: #1c1410 !important;
+}
+.radio-screen .text-amber-800,
+.radio-screen .text-amber-900,
+.radio-screen .text-amber-950,
+.radio-screen .dark\:text-amber-800,
+.radio-screen .dark\:text-amber-200,
+.radio-screen .dark\:text-amber-100 {
+  color: #3d2a1a !important;
+}
+
 /* Full-viewport applause floats (portal to body — not clipped by panels) */
 @keyframes trl-float-up {
   0% {

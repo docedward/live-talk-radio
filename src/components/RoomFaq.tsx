@@ -43,8 +43,8 @@ export function RoomFaq({ open, onClose, role = "listener" }: Props) {
 
         <div className="space-y-4 p-4 text-sm text-[#2a1c12]">
           <p className="radio-helper text-xs">
-            Live Talk Radio is a live talk show: one host, listeners, and an
-            optional speaker panel. Pick the section that matches you.
+            One host runs the show. Listeners hear and chat. Panel members can
+            talk on mic when the host lets them on air.
           </p>
 
           <Section
@@ -52,14 +52,13 @@ export function RoomFaq({ open, onClose, role = "listener" }: Props) {
             emoji="👂"
             highlight={role === "listener"}
             bullets={[
-              "Open the Share link the host sent (must be https://, not localhost).",
-              "Enter a display name (optional) and pick a card avatar, then Enter room.",
-              "Under Live sound, tap Unmute if you want to hear the show (speakers).",
-              "Use Just listen for a simple radio face, or Full tools for chat and questions.",
-              "Chat is casual talk. Use Ask for a question to the host queue.",
-              "Request On Air if you want to join the speaker panel (host must approve).",
-              "Applause row: tap emoji — they float for everyone (not chat).",
-              "You do not control the soundboard or mute other people.",
+              "Open the host’s Share link (https://).",
+              "Pick a name and card, then enter the room.",
+              "Unmute under Live sound to hear the show.",
+              "Just listen = simple view. Full tools = chat and questions.",
+              "Ask sends a question to the host. Chat is casual.",
+              "Request On Air if you want to speak. Wait for host approval.",
+              "Applause emoji float for everyone. They are not chat messages.",
             ]}
           />
 
@@ -68,14 +67,12 @@ export function RoomFaq({ open, onClose, role = "listener" }: Props) {
             emoji="🎙️"
             highlight={role === "panel"}
             bullets={[
-              "Start as a listener, then Request On Air (optional short topic).",
-              "When the host adds you to the panel, allow the microphone if the browser asks.",
-              "Under Live sound: Unmute mic to talk, Mute mic when you are done speaking.",
-              "Mic color (Clean / Radio / Phone) changes how your voice sounds — optional.",
-              "If the host mutes you, you stay on the panel but others cannot hear you until they unmute.",
-              "You still hear the host, other panel mics, and soundboard / clips.",
-              "Host can remove you from the panel anytime; you can also leave when the show ends.",
-              "Do not expect host tools (soundboard, approve questions) — those are host-only.",
+              "Join as a listener, then Request On Air.",
+              "When approved, allow the mic if the browser asks.",
+              "Unmute mic to talk. Mute mic when you are done.",
+              "Mic color is optional (Clean / Radio / Phone).",
+              "Host can mute or remove you. You still hear the room.",
+              "Only the host runs the soundboard and approvals.",
             ]}
           />
 
@@ -84,20 +81,18 @@ export function RoomFaq({ open, onClose, role = "listener" }: Props) {
             emoji="📻"
             highlight={role === "host"}
             bullets={[
-              "Create the room (or open your host link). Share / Copy the guest link — always the public https URL.",
-              "Connect Live sound; Unmute mic to speak. Use Mic color for radio/phone character.",
-              "Soundboard: short stings for the whole room. Clip board: hold / right-click a pad to upload ads or prerecords; click to play; you can talk over clips; Stop clip if needed.",
-              "Approve or reject questions. On Air requests: Add to panel or Reject.",
-              "Green name boxes = panel guests live. Tap a name to mute/unmute their mic (one-way). Remove drops them from the panel.",
-              "Clear whole panel if you need a clean slate.",
-              "You are always the show’s moderator — guests cannot press host boards.",
-              "When finished, Exit room. Free hosting may sleep when idle; wake the site before a live show.",
+              "Create a room. Share or Copy the guest link from the top bar.",
+              "Unmute mic under Live sound. Optional Mic color.",
+              "Soundboard pads play short effects for the room.",
+              "Clip board: hold a pad to upload an ad or clip. Click to play. You can talk over it.",
+              "Approve questions. Add On Air guests to the panel (up to the cap).",
+              "Tap a green name to mute or unmute that guest. Remove drops them.",
+              "Exit room when the show ends.",
             ]}
           />
 
           <p className="border-t border-[#d4c4a8] pt-3 text-xs text-[#4a3728]">
-            Tip: Keep this page open during the show. Tap FAQ anytime next to
-            Share.
+            FAQ is always next to Share.
           </p>
         </div>
       </div>

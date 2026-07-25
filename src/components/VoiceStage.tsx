@@ -19,6 +19,7 @@ import {
 } from "livekit-client";
 import { fetchVoiceToken } from "@/lib/api";
 import { isHostSfxId, playHostSfx } from "@/lib/host-sfx";
+import { claimSfxEventId, isHostLocalSfxQuietPeriod } from "@/lib/sfx-dedupe";
 import {
   applyOutputMuteToDom,
   isRoomOutputMuted,
@@ -490,14 +491,13 @@ function VoiceKeepAlive({
 
 function LiveKitSfxListener() {
   const room = useRoomContext();
-  const seen = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!room) return;
 
     const onData = (
       payload: Uint8Array,
-      _participant?: unknown,
+      participant?: { isLocal?: boolean } | null,
       _kind?: unknown,
       topic?: string
     ) => {
@@ -511,21 +511,23 @@ function LiveKitSfxListener() {
           from?: string;
         };
         if (msg.type === "emote" && msg.emoji) {
+          // Local sender already spawned float via sendEmote
+          if (participant?.isLocal) return;
           receiveEmote(msg.emoji, msg.from || "guest");
           return;
         }
         if (topic === "trl-emote") return;
         if (msg.type !== "sfx" || !msg.sound || !isHostSfxId(msg.sound)) return;
-        const sound = msg.sound;
-        if (msg.id && seen.current.has(msg.id)) return;
+        // Host already played on button press (server sendData is not "local")
+        if (participant?.isLocal || isHostLocalSfxQuietPeriod()) return;
+        // Global dedupe (REST poll + data packet + races)
         if (msg.id) {
-          seen.current.add(msg.id);
-          if (seen.current.size > 40) {
-            seen.current = new Set([...seen.current].slice(-20));
-          }
+          if (!claimSfxEventId(msg.id)) return;
+        } else if (!claimSfxEventId(`lk-${msg.sound}-${Math.floor(Date.now() / 500)}`)) {
+          return;
         }
         if (isRoomOutputMuted()) return;
-        void unlockRoomAudio().then(() => playHostSfx(sound));
+        void unlockRoomAudio().then(() => playHostSfx(msg.sound!));
       } catch {
         /* ignore */
       }

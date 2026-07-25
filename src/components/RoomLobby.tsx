@@ -578,10 +578,10 @@ export function RoomLobby({ roomId }: Props) {
       </div>
 
       {isHost && !compact && (
-        <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900 dark:border-violet-900 dark:bg-violet-950/50 dark:text-violet-100">
-          <strong>Host controls are on.</strong> Approve questions. Add
-          listeners to the <strong>speaker panel</strong> (up to {panelCap}{" "}
-          guests + you). Clip board = prerecords/ads (hold pad to upload).
+        <div className="rounded-xl border border-[#d4a574] bg-[#f3e0c8] px-4 py-3 text-sm text-[#1c1410]">
+          <strong>You are the host.</strong> Approve questions. Add up to{" "}
+          {panelCap} guests to the speaker panel. Hold a Clip pad to upload
+          ads or prerecords.
         </div>
       )}
 
