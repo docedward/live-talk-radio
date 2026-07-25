@@ -71,18 +71,18 @@ export interface PresenceMember {
 
 /** Host soundboard cue broadcast to the room. */
 export type RoomSfxId =
-  | "cry"
-  | "drumroll"
-  | "pew"
-  | "laugh"
   | "applause"
-  | "ohh"
-  | "rimshot"
-  | "boo"
-  | "airhorn"
-  | "buzzer"
-  | "ding"
-  | "crickets";
+  | "pew"
+  | "horn"
+  | "asmr"
+  | "riser"
+  | "pop"
+  | "funny"
+  | "meme"
+  | "alert"
+  | "laugh"
+  | "popwow"
+  | "ghost";
 
 export interface RoomSfxEvent {
   id: string;

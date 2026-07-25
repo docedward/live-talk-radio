@@ -1,21 +1,19 @@
-Host soundboard — short real recordings (≤ 1.8 seconds each)
+Host soundboard — short stings (trimmed ≤ ~1.8s, mono WAV)
 ============================================================
 
-| Button   | File         | Sound              |
-|----------|--------------|--------------------|
-| Baby     | cry.wav      | Baby crying        |
-| Laugh    | laugh.wav    | Crowd laugh        |
-| Applause | applause.wav | Audience applause  |
-| Boo      | boo.wav      | Crowd boo          |
-| Crowd    | ohh.wav      | Crowd reaction     |
-| Airhorn  | airhorn.wav  | Air horn           |
-| Buzzer   | buzzer.wav   | Wrong buzzer       |
-| Bell     | ding.wav     | Bell               |
-| Drums    | drumroll.wav | Drum roll (short)  |
-| Clap     | rimshot.wav  | Clap / hit         |
-| Laser    | pew.wav      | Laser              |
-| Crickets | crickets.wav | Crickets           |
+| Button   | File         | Emoji | Concept        |
+|----------|--------------|-------|----------------|
+| Applause | applause.wav | 👏    | Crowd clap     |
+| Pew Pew  | pew.wav      | 🔫    | Laser pew      |
+| Horn     | horn.wav     | 📢    | Air horn       |
+| ASMR     | asmr.wav     | 🎧    | Soft ASMR-ish  |
+| Riser    | riser.wav    | 📈    | Cinematic rise |
+| Pop      | pop.wav      | 🫧    | Pop bubble     |
+| Funny    | funny.wav    | 🚨    | Funny alarm    |
+| Meme     | meme.wav     | 😏    | Meme sting     |
+| Alert    | alert.wav    | ⚠️    | Alert / alarm  |
+| Laugh    | laugh.wav    | 😂    | Laugh          |
+| Wow      | popwow.wav   | 💥    | Pop / wow      |
+| Ghost    | ghost.wav    | 👻    | Spooky tone    |
 
-All clips trimmed to ≤ 1.8s with a short fade-out.
-Free library sources — see ATTRIBUTION.txt.
-Replace any file (same name) to swap a pad.
+Sources & licenses: see ATTRIBUTION.txt

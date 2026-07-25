@@ -1,24 +1,32 @@
-Soundboard recordings (free for project use)
-============================================
+TRL host soundboard sources (2026-07-25 rebuild)
+================================================
 
-These WAV files were converted from free SoundBible.com downloads
-(public sound library; free for personal/commercial use with attribution
-where the original listing requested it).
+Trimmed to ≤ ~1.8s mono WAV for room stings. Previews used where full
+download required login; free CDN previews from Freesound.
 
-| File        | Source (SoundBible grab id) | Typical content      |
-|-------------|-----------------------------|----------------------|
-| cry.wav     | 1630                        | Baby crying          |
-| applause.wav| SoundBible audience clap    | Audience applause    |
-| laugh.wav   | 2076                        | Crowd / audience laugh|
-| airhorn.wav | 1830                        | Air horn             |
-| buzzer.wav  | 1501                        | Wrong buzzer         |
-| ding.wav    | 2154                        | Bell / ding          |
-| boo.wav     | 1320                        | Crowd boo            |
-| crickets.wav| 1103                        | Crickets             |
-| pew.wav     | 2156                        | Laser / pew          |
-| drumroll.wav| 2065                        | Drum roll            |
-| rimshot.wav | 1900                        | Snare / rim feel     |
-| ohh.wav     | 2158                        | Crowd reaction       |
+Exact user Freesound picks
+--------------------------
+- Pew Pew: OBXJohn https://freesound.org/people/OBXJohn/sounds/365636/
+- Horn: Greg Baumont https://freesound.org/people/Greg%20Baumont/sounds/53711/
+- ASMR: harrisonlace https://freesound.org/people/harrisonlace/sounds/771954/
 
-If a license page is needed for a specific sound, search SoundBible by sound name.
-Replace any file anytime with your own licensed recording using the same filename.
+User-requested Pixabay pages (Cloudflare blocked automated download)
+--------------------------------------------------------------------
+We used free Freesound substitutes matching the requested *character*
+(riser, pop, funny alarm, meme, alert, laugh, wow, ghost/waterphone).
+If you download the exact Pixabay files into inputs/, we can re-swap 1:1.
+
+- Applause: Freesound short applause (user link was a tag search, not a sound)
+  https://freesound.org/s/339809/
+- Riser: https://freesound.org/s/413476/ (cinematic-style rise)
+- Pop: https://freesound.org/s/257232/
+- Funny: https://freesound.org/s/428156/ (alarm-ish funny sting)
+- Meme: https://freesound.org/s/397355/
+- Alert: https://freesound.org/s/411089/
+- Laugh: https://freesound.org/s/316920/
+- Wow (2nd Pop): https://freesound.org/s/253886/
+- Ghost: https://freesound.org/s/162465/ (waterphone-adjacent spook)
+
+Licenses are those of the individual Freesound authors (typically CC0 or
+CC-BY). Check each sound page for attribution requirements if you
+redistribute commercially.

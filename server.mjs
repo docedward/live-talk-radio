@@ -339,18 +339,18 @@ function createRoom(name) {
 }
 
 const HOST_SFX_IDS = new Set([
-  "cry",
-  "drumroll",
-  "pew",
-  "laugh",
   "applause",
-  "ohh",
-  "rimshot",
-  "boo",
-  "airhorn",
-  "buzzer",
-  "ding",
-  "crickets",
+  "pew",
+  "horn",
+  "asmr",
+  "riser",
+  "pop",
+  "funny",
+  "meme",
+  "alert",
+  "laugh",
+  "popwow",
+  "ghost",
 ]);
 
 function triggerSfx(roomId, hostMemberId, sound) {
