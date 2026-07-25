@@ -292,23 +292,10 @@ export function VoiceStage({
   );
 }
 
-/** Soft-duck host/panel mic tracks while a clip is in the air. */
-function setMicDucked(localParticipant: LocalParticipant, duck: boolean) {
-  localParticipant.audioTrackPublications.forEach((pub) => {
-    if (pub.source !== Track.Source.Microphone) return;
-    const mst = pub.track?.mediaStreamTrack;
-    if (mst) mst.enabled = !duck;
-  });
-  // Filtered sessions also expose setDuck via window bridge
-  const duckFn = (
-    window as unknown as { __trlMicDuck?: (d: boolean) => void }
-  ).__trlMicDuck;
-  if (duckFn) duckFn(duck);
-}
-
 /**
  * Registers a LiveKit publisher so Host Clip Board can inject prerecorded
  * audio into the room (outside the LiveKitRoom React tree).
+ * Mic stays live so host can talk over the clip (VO / intro over ad).
  */
 function ClipPublisherBridge({ canPublish }: { canPublish: boolean }) {
   const { localParticipant } = useLocalParticipant();
@@ -351,7 +338,8 @@ function ClipPublisherBridge({ canPublish }: { canPublish: boolean }) {
 
       src.buffer = playBuf;
       const g = ac.createGain();
-      g.gain.value = 0.95;
+      // Slightly under unity so host voice can sit on top without clipping
+      g.gain.value = 0.85;
       src.connect(g);
       g.connect(dest);
       g.connect(ac.destination);
@@ -362,9 +350,6 @@ function ClipPublisherBridge({ canPublish }: { canPublish: boolean }) {
         throw new Error("Could not create clip track");
       }
 
-      // Duck live mic under the ad/clip
-      setMicDucked(localParticipant, true);
-
       let publication: LocalTrackPublication | undefined;
       try {
         publication = await localParticipant.publishTrack(mediaTrack, {
@@ -372,7 +357,6 @@ function ClipPublisherBridge({ canPublish }: { canPublish: boolean }) {
           source: Track.Source.Unknown,
         });
       } catch (err) {
-        setMicDucked(localParticipant, false);
         void ac.close().catch(() => undefined);
         throw err instanceof Error
           ? err
@@ -403,7 +387,6 @@ function ClipPublisherBridge({ canPublish }: { canPublish: boolean }) {
         } catch {
           /* ignore */
         }
-        setMicDucked(localParticipant, false);
         void ac.close().catch(() => undefined);
       };
 
@@ -625,19 +608,6 @@ function VoiceChrome({
     return subscribeRoomAudio(() => {
       setSoundMuted(isRoomOutputMuted());
     });
-  }, []);
-
-  // Expose duck for clip board (filtered sessions)
-  useEffect(() => {
-    (
-      window as unknown as { __trlMicDuck?: (d: boolean) => void }
-    ).__trlMicDuck = (duck: boolean) => {
-      filterSession.current?.setDuck(duck);
-    };
-    return () => {
-      delete (window as unknown as { __trlMicDuck?: (d: boolean) => void })
-        .__trlMicDuck;
-    };
   }, []);
 
   async function tearDownFilteredMic() {

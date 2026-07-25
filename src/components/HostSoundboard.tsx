@@ -223,7 +223,7 @@ export function HostSoundboard({ roomId }: Props) {
               Clip board · ads &amp; prerecords
             </h3>
             <p className="radio-helper mt-0.5 text-[10px]">
-              Max {MAX_CLIP_SECONDS}s · mp3/wav/m4a/ogg · mic ducks under clip
+              Max {MAX_CLIP_SECONDS}s · mp3/wav/m4a/ogg · talk over clips OK
             </p>
           </div>
           {clipPlaying && (
