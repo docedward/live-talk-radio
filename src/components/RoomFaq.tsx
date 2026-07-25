@@ -8,7 +8,7 @@ type Props = {
 };
 
 /**
- * In-app FAQ: simple how-to for listener, panel member, and host.
+ * In-app FAQ — plain language for listener, panel, and host.
  */
 export function RoomFaq({ open, onClose, role = "listener" }: Props) {
   if (!open) return null;
@@ -42,9 +42,9 @@ export function RoomFaq({ open, onClose, role = "listener" }: Props) {
         </header>
 
         <div className="space-y-4 p-4 text-sm text-[#2a1c12]">
-          <p className="radio-helper text-xs">
-            One host runs the show. Listeners hear and chat. Panel members can
-            talk on mic when the host lets them on air.
+          <p className="text-xs leading-relaxed text-[#3d2a1a]">
+            One host runs the show. Listeners hear and chat. If the host puts
+            you on the panel, you can talk on the mic.
           </p>
 
           <Section
@@ -52,13 +52,13 @@ export function RoomFaq({ open, onClose, role = "listener" }: Props) {
             emoji="👂"
             highlight={role === "listener"}
             bullets={[
-              "Open the host’s Share link (https://).",
-              "Pick a name and card, then enter the room.",
-              "Unmute under Live sound to hear the show.",
-              "Just listen = simple view. Full tools = chat and questions.",
-              "Ask sends a question to the host. Chat is casual.",
-              "Request On Air if you want to speak. Wait for host approval.",
-              "Applause emoji float for everyone. They are not chat messages.",
+              "Open the share link the host sent (it should start with https://).",
+              "Choose a name and a card, then enter the room.",
+              "Under Live sound, unmute so you can hear the show.",
+              "Just listen keeps the screen simple. Full tools opens chat and questions.",
+              "Use Ask for a question to the host. Chat is for casual talk.",
+              "Tap Request on air if you want to speak. The host has to approve you.",
+              "Applause emojis float for everyone. They are not chat messages.",
             ]}
           />
 
@@ -67,12 +67,12 @@ export function RoomFaq({ open, onClose, role = "listener" }: Props) {
             emoji="🎙️"
             highlight={role === "panel"}
             bullets={[
-              "Join as a listener, then Request On Air.",
-              "When approved, allow the mic if the browser asks.",
+              "Join as a listener first, then tap Request on air.",
+              "When the host adds you, allow the microphone if the browser asks.",
               "Unmute mic to talk. Mute mic when you are done.",
-              "Mic color is optional (Clean / Radio / Phone).",
-              "Host can mute or remove you. You still hear the room.",
-              "Only the host runs the soundboard and approvals.",
+              "Mic color is optional (Clean, Radio, or Phone).",
+              "The host can mute or remove you. You can still hear the room.",
+              "Only the host uses the soundboard and approvals.",
             ]}
           />
 
@@ -81,18 +81,19 @@ export function RoomFaq({ open, onClose, role = "listener" }: Props) {
             emoji="📻"
             highlight={role === "host"}
             bullets={[
-              "Create a room. Share or Copy the guest link from the top bar.",
-              "Unmute mic under Live sound. Optional Mic color.",
-              "Soundboard pads play short effects for the room.",
-              "Clip board: hold a pad to upload an ad or clip. Click to play. You can talk over it.",
-              "Approve questions. Add On Air guests to the panel (up to the cap).",
-              "Tap a green name to mute or unmute that guest. Remove drops them.",
-              "Exit room when the show ends.",
+              "Create a room. Use Share or Copy at the top for the guest link.",
+              "Unmute your mic under Live sound. Mic color is optional.",
+              "Soundboard pads play short effects. Wait five seconds between hits so they do not stack.",
+              "Effects play all the way through. The five-second wait only blocks a new press.",
+              "Clip board: hold a pad to upload an ad or clip, then click to play. You can talk over it.",
+              "Approve questions. Add people to the panel from On air requests.",
+              "Tap a green name to mute or unmute that guest. Remove drops them from the panel.",
+              "Exit room when the show is over.",
             ]}
           />
 
           <p className="border-t border-[#d4c4a8] pt-3 text-xs text-[#4a3728]">
-            FAQ is always next to Share.
+            You can open FAQ anytime next to Share.
           </p>
         </div>
       </div>

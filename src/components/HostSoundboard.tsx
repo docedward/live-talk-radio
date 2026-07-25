@@ -224,8 +224,8 @@ export function HostSoundboard({ roomId }: Props) {
         <p className="radio-helper text-[11px]">
           Only you press. Everyone hears.
           {cooldownLeft > 0
-            ? ` · Wait ${Math.ceil(cooldownLeft / 1000)}s`
-            : " · 5s between hits"}
+            ? ` · Wait ${Math.ceil(cooldownLeft / 1000)}s before next hit`
+            : " · 5s between new hits (sounds play out)"}
         </p>
       </div>
 

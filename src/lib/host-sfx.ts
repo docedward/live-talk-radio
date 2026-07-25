@@ -183,7 +183,7 @@ async function loadBuffer(
 ): Promise<AudioBuffer | null> {
   if (bufferCache.has(id)) return bufferCache.get(id) ?? null;
   try {
-    const res = await fetch(`/sfx/${id}.wav`, { cache: "force-cache" });
+    const res = await fetch(`/sfx/${id}.wav?v=2`, { cache: "no-cache" });
     if (!res.ok) {
       bufferCache.set(id, null);
       return null;
@@ -207,6 +207,9 @@ export async function preloadHostSfx(): Promise<void> {
   await Promise.all(HOST_SFX_BUTTONS.map((b) => loadBuffer(c, b.id)));
 }
 
+/** Active HTMLAudio so we never stop mid-play for cooldown (cooldown only blocks new hits). */
+let activeHtmlAudio: HTMLAudioElement | null = null;
+
 function playBuffer(c: AudioContext, buf: AudioBuffer) {
   const src = c.createBufferSource();
   src.buffer = buf;
@@ -217,6 +220,10 @@ function playBuffer(c: AudioContext, buf: AudioBuffer) {
   src.start();
 }
 
+/**
+ * Play full file to the end. Does not stop a currently playing effect —
+ * board cooldown only prevents *starting* a new pad.
+ */
 export async function playHostSfx(id: HostSfxId): Promise<boolean> {
   const { isRoomOutputMuted } = await import("@/lib/room-audio");
   if (isRoomOutputMuted()) return false;
@@ -224,12 +231,16 @@ export async function playHostSfx(id: HostSfxId): Promise<boolean> {
   await unlockHostSfx();
 
   try {
-    const audio = new Audio(`/sfx/${id}.wav`);
+    // Bust cache so updated WAVs play after deploy
+    const audio = new Audio(`/sfx/${id}.wav?v=2`);
     audio.volume = 0.95;
+    audio.preload = "auto";
+    // Do not pause previous — let it finish (cooldown blocks new starts)
+    activeHtmlAudio = audio;
     await audio.play();
     return true;
   } catch {
-    /* fall through */
+    /* fall through to Web Audio */
   }
 
   const c = ac();

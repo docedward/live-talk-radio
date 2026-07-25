@@ -198,11 +198,10 @@ export function VoiceStage({
 
   if (!secure) {
     return (
-      <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
-        <p className="font-semibold">Voice needs a secure link (HTTPS)</p>
+      <div className="rounded-xl border border-[#d4a574] bg-[#f3e0c8] px-4 py-3 text-sm text-[#1c1410]">
+        <p className="font-semibold">Voice needs HTTPS</p>
         <p className="mt-1">
-          Open the public <strong>https://</strong> link (not localhost or
-          192.168…).
+          Open the app with an <strong>https://</strong> link (not localhost).
         </p>
       </div>
     );
@@ -229,8 +228,8 @@ export function VoiceStage({
   return (
     <div className="flex flex-col gap-2">
       {loadError && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
-          Control blip: {loadError}. Voice stays up if possible.{" "}
+        <div className="rounded-xl border border-[#d4a574] bg-[#f3e0c8] px-3 py-2 text-xs text-[#1c1410]">
+          Control blip: {loadError}. Voice should stay up.{" "}
           <button
             type="button"
             className="font-semibold underline"
@@ -920,13 +919,13 @@ function VoiceChrome({
         <p className="text-xs text-red-700 dark:text-red-300">{micError}</p>
       )}
       {connected && canPublish && !micOn && !hostMuted && (
-        <p className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-medium text-amber-950 dark:bg-amber-950 dark:text-amber-100">
+        <p className="rounded-lg border border-[#d4a574] bg-[#f3e0c8] px-3 py-2 text-xs font-medium text-[#1c1410]">
           Mic is off — others cannot hear you. Tap <strong>Unmute mic</strong>.
         </p>
       )}
       {connected && canPublish && hostMuted && (
-        <p className="text-xs text-amber-800 dark:text-amber-200">
-          The host muted your microphone. You should still hear the show.
+        <p className="rounded-lg border border-[#d4a574] bg-[#f3e0c8] px-3 py-2 text-xs font-medium text-[#1c1410]">
+          The host muted your mic. You can still hear the show.
         </p>
       )}
     </div>
