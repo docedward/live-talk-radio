@@ -733,7 +733,7 @@ export function RoomLobby({ roomId }: Props) {
           />
 
           {/* 3. Applause */}
-          <EmoteRail />
+          <EmoteRail myName={displayName || "Guest"} myAvatarId={avatarId} />
 
           {/* 4. Host tools */}
           {isHost && <HostSoundboard roomId={roomId} />}
@@ -773,7 +773,9 @@ export function RoomLobby({ roomId }: Props) {
         </>
       )}
 
-      {compact && <EmoteRail />}
+      {compact && (
+        <EmoteRail myName={displayName || "Guest"} myAvatarId={avatarId} />
+      )}
     </div>
   );
 }

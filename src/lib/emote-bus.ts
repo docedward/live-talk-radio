@@ -2,34 +2,38 @@
  * Cross-device emotes via LiveKit data packets (registered from VoiceStage).
  */
 
-export type EmoteSender = (emoji: string) => Promise<void>;
+export type EmoteMeta = {
+  emoji: string;
+  from: string;
+  avatarId?: string | null;
+};
+
+export type EmoteSender = (meta: EmoteMeta) => Promise<void>;
 
 let sender: EmoteSender | null = null;
-const localHandlers = new Set<(emoji: string, from: string) => void>();
+const localHandlers = new Set<(meta: EmoteMeta) => void>();
 
 export function setEmoteSender(fn: EmoteSender | null) {
   sender = fn;
 }
 
-export function subscribeEmotes(
-  fn: (emoji: string, from: string) => void
-): () => void {
+export function subscribeEmotes(fn: (meta: EmoteMeta) => void): () => void {
   localHandlers.add(fn);
   return () => {
     localHandlers.delete(fn);
   };
 }
 
-export function receiveEmote(emoji: string, from: string) {
-  localHandlers.forEach((h) => h(emoji, from));
+export function receiveEmote(meta: EmoteMeta) {
+  localHandlers.forEach((h) => h(meta));
 }
 
-export async function sendEmote(emoji: string): Promise<void> {
+export async function sendEmote(meta: EmoteMeta): Promise<void> {
   // Always show locally even if LiveKit not ready
-  receiveEmote(emoji, "you");
+  receiveEmote(meta);
   if (sender) {
     try {
-      await sender(emoji);
+      await sender(meta);
     } catch {
       /* local-only */
     }

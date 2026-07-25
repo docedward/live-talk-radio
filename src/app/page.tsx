@@ -16,6 +16,10 @@ export default function HomePage() {
           invite people in, and put listeners on the panel to talk with you.
           Nothing is recorded. Take your own notes if you want a memory.
         </p>
+        <p className="max-w-2xl text-sm text-[#6b5a48]">
+          Built for live shows and friend panels — not always-on hangouts.
+          Empty shows close after a few minutes idle.
+        </p>
       </header>
 
       <div className="grid items-start gap-6 lg:grid-cols-2">

@@ -508,11 +508,16 @@ function LiveKitSfxListener() {
           id?: string;
           emoji?: string;
           from?: string;
+          avatarId?: string | null;
         };
         if (msg.type === "emote" && msg.emoji) {
           // Local sender already spawned float via sendEmote
           if (participant?.isLocal) return;
-          receiveEmote(msg.emoji, msg.from || "guest");
+          receiveEmote({
+            emoji: msg.emoji,
+            from: msg.from || "Guest",
+            avatarId: msg.avatarId ?? null,
+          });
           return;
         }
         if (topic === "trl-emote") return;
@@ -558,12 +563,13 @@ function EmoteDataBridge() {
       setEmoteSender(null);
       return;
     }
-    setEmoteSender(async (emoji: string) => {
+    setEmoteSender(async (meta) => {
       const payload = new TextEncoder().encode(
         JSON.stringify({
           type: "emote",
-          emoji,
-          from: room.localParticipant.name || "guest",
+          emoji: meta.emoji,
+          from: meta.from || room.localParticipant.name || "Guest",
+          avatarId: meta.avatarId || null,
           id: crypto.randomUUID?.() || String(Date.now()),
         })
       );

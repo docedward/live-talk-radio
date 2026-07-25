@@ -229,12 +229,48 @@ function makeHostToken() {
   return randomBytes(16).toString("hex");
 }
 
+/** Empty show GC — no members for this long → delete (not joinable). */
+const EMPTY_SHOW_GC_MS = 3 * 60 * 1000;
+/** Host alone with no listeners this long → soft end (optional hygiene). */
+const HOST_ONLY_IDLE_MS = 60 * 60 * 1000;
+
 function listRoomsPublic() {
+  pruneIdleShows();
   return Array.from(rooms.values()).map((state) => ({
     id: state.room.id,
     name: state.room.name,
     listenerCount: countListeners(state),
   }));
+}
+
+/**
+ * Drop empty shows and very long host-only zombies so free tier stays honest.
+ */
+function pruneIdleShows() {
+  const now = Date.now();
+  for (const [id, state] of rooms.entries()) {
+    pruneStaleMembers(state);
+    const n = state.members.size;
+    if (n === 0) {
+      if (!state.emptySince) state.emptySince = now;
+      else if (now - state.emptySince > EMPTY_SHOW_GC_MS) {
+        rooms.delete(id);
+        void livekitDeleteRoom(id);
+      }
+      continue;
+    }
+    state.emptySince = null;
+    const listeners = countListeners(state);
+    if (listeners === 0) {
+      if (!state.hostOnlySince) state.hostOnlySince = now;
+      else if (now - state.hostOnlySince > HOST_ONLY_IDLE_MS) {
+        rooms.delete(id);
+        void livekitDeleteRoom(id);
+      }
+    } else {
+      state.hostOnlySince = null;
+    }
+  }
 }
 
 function countListeners(state) {
@@ -875,19 +911,14 @@ function publicSnapshot(roomId, role, memberId) {
   const state = rooms.get(roomId);
   if (!state) throw new Error("Room not found");
   pruneStaleMembers(state);
+  pruneIdleShows();
+  if (!rooms.has(roomId)) throw new Error("Show has ended");
   const snap = buildSnapshot(roomId, role);
   const rawPanel = snap.livePanel || [];
   const panelCount = rawPanel.length;
 
-  // Host sees full panel with names. Listeners only see their own row (if live).
-  let livePanelPublic;
-  if (role === "host") {
-    livePanelPublic = rawPanel.map((r) => publicRequest(r, memberId));
-  } else {
-    livePanelPublic = rawPanel
-      .filter((r) => r.memberId === memberId)
-      .map((r) => publicRequest(r, memberId));
-  }
+  // Stage is public: everyone sees who is on the panel (card + name).
+  const livePanelPublic = rawPanel.map((r) => publicRequest(r, memberId));
 
   // Pending On Air queue: host sees names; listeners see own pending + anonymized others
   const onAirPublic =

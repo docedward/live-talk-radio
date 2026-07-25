@@ -243,131 +243,130 @@ export function QuestionQueue({
         </p>
       </header>
 
-      {/* Speaker panel — host sees names; listeners only count / own status */}
-      <div className="max-h-40 shrink-0 overflow-y-auto border-b border-zinc-200 bg-violet-50 px-4 py-3 dark:border-zinc-800 dark:bg-violet-950/40">
+      {/* On-stage panel — public booth seats */}
+      <div className="shrink-0 border-b border-[#d4c4a8] bg-gradient-to-b from-[#2a1a0f] to-[#1a1008] px-4 py-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">
-            Speaker panel ({panelCount}/{cap} guests)
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#e8a820]">
+            On stage · {panelCount}/{cap}
           </p>
           {role === "host" && panelCount > 0 && (
             <button
               type="button"
               onClick={() => void onClearLive()}
-              className="text-xs font-medium text-violet-700 underline dark:text-violet-300"
+              className="text-xs font-medium text-[#f5e6c8] underline"
             >
-              Clear whole panel
+              Clear stage
             </button>
           )}
         </div>
+        <p className="mt-1 text-[11px] text-[#c4b8a8]">
+          {role === "host"
+            ? "Green seats are live. Tap a seat to mute/unmute."
+            : "These people are on the broadcast with the host."}
+        </p>
 
-        {role === "host" ? (
-          <>
-            <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-              Green = live mic. Tap a name to mute/unmute. Remove drops them
-              from the panel.
-            </p>
-            {livePanel.length === 0 ? (
-              <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-                No guests on the panel yet. Approve On Air requests below.
-              </p>
-            ) : (
-              <ul className="mt-2 flex flex-col gap-2">
-                {livePanel.map((r) => {
-                  const muted = !!r.hostMuted;
-                  const name = r.authorName || "Guest";
-                  const isSpeaking =
-                    !muted &&
-                    (speakingNames.has(name) ||
-                      [...speakingNames].some(
-                        (n) => n.toLowerCase() === name.toLowerCase()
-                      ));
-                  const level =
-                    speakingLevels.get(name) ??
-                    [...speakingLevels.entries()].find(
-                      ([n]) => n.toLowerCase() === name.toLowerCase()
-                    )?.[1] ??
-                    0;
-                  return (
-                    <li
-                      key={r.id}
-                      className="flex flex-wrap items-center gap-2"
+        {livePanel.length === 0 ? (
+          <p className="mt-3 rounded-xl border border-dashed border-[#5c3d24] bg-black/20 px-3 py-4 text-center text-sm text-[#c4b8a8]">
+            Stage is empty.{" "}
+            {role === "host"
+              ? "Approve someone from On air requests below."
+              : "Request on air to take a seat."}
+          </p>
+        ) : (
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {livePanel.map((r) => {
+              const muted = !!r.hostMuted;
+              const name = r.authorName || "Guest";
+              const isSpeaking =
+                !muted &&
+                (speakingNames.has(name) ||
+                  [...speakingNames].some(
+                    (n) => n.toLowerCase() === name.toLowerCase()
+                  ));
+              const level =
+                speakingLevels.get(name) ??
+                [...speakingLevels.entries()].find(
+                  ([n]) => n.toLowerCase() === name.toLowerCase()
+                )?.[1] ??
+                0;
+              const seat = (
+                <div
+                  className={`flex min-w-[9.5rem] flex-1 flex-col items-center rounded-2xl border-2 px-3 py-3 text-center transition ${
+                    muted
+                      ? "border-zinc-500 bg-zinc-800/80 text-zinc-300"
+                      : isSpeaking
+                        ? "border-emerald-400 bg-emerald-900/50 text-emerald-50 shadow-[0_0_20px_rgba(52,211,153,0.35)] ring-2 ring-emerald-400/50"
+                        : "border-emerald-600/80 bg-emerald-950/40 text-emerald-50"
+                  }`}
+                >
+                  <PlayingCard
+                    cardId={r.authorAvatar}
+                    size="md"
+                    className="shrink-0 shadow-md"
+                  />
+                  <span className="mt-2 block max-w-full truncate text-sm font-bold">
+                    {name}
+                  </span>
+                  <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide opacity-90">
+                    {muted
+                      ? "Muted"
+                      : isSpeaking
+                        ? "Speaking"
+                        : r.isMe
+                          ? "You · live"
+                          : "On air"}
+                  </span>
+                  {!muted && (
+                    <span
+                      className="mt-2 h-1 w-full max-w-[6rem] overflow-hidden rounded-full bg-black/40"
+                      aria-hidden
                     >
+                      <span
+                        className="block h-full rounded-full bg-emerald-400 transition-[width] duration-75"
+                        style={{
+                          width: `${Math.min(100, Math.round(level * 140))}%`,
+                        }}
+                      />
+                    </span>
+                  )}
+                </div>
+              );
+              return (
+                <li key={r.id} className="flex min-w-[10rem] flex-1 flex-col gap-1.5">
+                  {role === "host" ? (
+                    <>
                       <button
                         type="button"
                         onClick={() => void onToggleMute(r.id)}
-                        className={`min-h-12 min-w-[8rem] flex-1 rounded-xl border-2 px-3 py-2 text-left transition active:scale-[0.99] ${
-                          muted
-                            ? "border-zinc-400 bg-zinc-100 text-zinc-600 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-300"
-                            : isSpeaking
-                              ? "border-emerald-400 bg-emerald-200 shadow-md ring-2 ring-emerald-400/70 dark:border-emerald-300 dark:bg-emerald-800/70 dark:ring-emerald-400/50"
-                              : "border-emerald-500 bg-emerald-50 text-emerald-950 shadow-sm dark:border-emerald-400 dark:bg-emerald-950/50 dark:text-emerald-50"
-                        }`}
+                        className="w-full text-left active:scale-[0.99]"
                       >
-                        <span className="flex items-start gap-2">
-                          <PlayingCard
-                            cardId={r.authorAvatar}
-                            size="sm"
-                            className="mt-0.5 shrink-0"
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-sm font-semibold">
-                              {name}
-                              {isSpeaking ? " · speaking" : ""}
-                            </span>
-                            <span className="block text-xs font-medium opacity-80">
-                              {muted
-                                ? "Muted — tap to unmute"
-                                : isSpeaking
-                                  ? "Hot mic — tap to mute"
-                                  : "Live — tap to mute"}
-                            </span>
-                            {!muted && (
-                              <span
-                                className="mt-1 block h-1 overflow-hidden rounded-full bg-emerald-900/20 dark:bg-black/30"
-                                aria-hidden
-                              >
-                                <span
-                                  className="block h-full rounded-full bg-emerald-600 transition-[width] duration-75 dark:bg-emerald-300"
-                                  style={{
-                                    width: `${Math.min(100, Math.round(level * 140))}%`,
-                                  }}
-                                />
-                              </span>
-                            )}
-                          </span>
-                        </span>
+                        {seat}
                       </button>
                       <HostBtn
                         label="Remove"
                         tone="danger"
                         onClick={() => void onRemoveFromPanel(r.id)}
                       />
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-            {panelFull && (
-              <p className="mt-2 text-xs text-amber-800 dark:text-amber-200">
-                Panel full. Remove someone before adding another guest.
-              </p>
-            )}
-          </>
-        ) : (
-          <>
-            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-              {panelCount === 0
-                ? "No guests on the panel yet."
-                : `${panelCount} guest${panelCount === 1 ? "" : "s"} on the panel with the host.`}
-            </p>
-            {iAmOnPanel && (
-              <p className="mt-2 text-xs font-medium text-emerald-800 dark:text-emerald-200">
-                {iAmHostMuted
-                  ? "You are on the panel but the host muted your mic."
-                  : "You are on the panel — allow the mic if asked."}
-              </p>
-            )}
-          </>
+                    </>
+                  ) : (
+                    seat
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {panelFull && role === "host" && (
+          <p className="mt-2 text-xs text-amber-200">
+            Stage full. Remove someone before adding another guest.
+          </p>
+        )}
+        {role === "listener" && iAmOnPanel && (
+          <p className="mt-2 text-xs font-medium text-emerald-200">
+            {iAmHostMuted
+              ? "You are on stage but muted."
+              : "You are on stage — unmute mic under Live sound."}
+          </p>
         )}
       </div>
 
