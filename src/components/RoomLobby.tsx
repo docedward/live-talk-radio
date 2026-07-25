@@ -22,6 +22,7 @@ import { VoiceStage } from "./VoiceStage";
 import { CardAvatarPicker } from "./CardAvatarPicker";
 import { PlayingCard } from "./PlayingCard";
 import { EmoteRail } from "./EmoteRail";
+import { RoomFaq } from "./RoomFaq";
 import { unlockRoomAudio } from "@/lib/room-audio";
 
 type Props = {
@@ -83,6 +84,9 @@ export function RoomLobby({ roomId }: Props) {
   const [roomLink, setRoomLink] = useState<string | null>(null);
   /** Listen mode: compact radio face (listeners). Host always full. */
   const [listenMode, setListenMode] = useState(false);
+  const [faqOpen, setFaqOpen] = useState(false);
+  /** Blink FAQ button for 5s after entering the room. */
+  const [faqBlink, setFaqBlink] = useState(false);
 
   // Client-only boot: localStorage is never read during SSR
   useEffect(() => {
@@ -207,6 +211,26 @@ export function RoomLobby({ roomId }: Props) {
       cancelled = true;
       clearInterval(id);
     };
+  }, [snapshot, roomId]);
+
+  // Blink FAQ for 5 seconds when first entering the room this session
+  useEffect(() => {
+    if (!snapshot) return;
+    let skip = false;
+    try {
+      skip = sessionStorage.getItem(`ltr-faq-blinked-${roomId}`) === "1";
+    } catch {
+      /* ignore */
+    }
+    if (skip) return;
+    setFaqBlink(true);
+    try {
+      sessionStorage.setItem(`ltr-faq-blinked-${roomId}`, "1");
+    } catch {
+      /* ignore */
+    }
+    const t = window.setTimeout(() => setFaqBlink(false), 5000);
+    return () => window.clearTimeout(t);
   }, [snapshot, roomId]);
 
   async function join(name: string, hostToken?: string, card?: CardId | null) {
@@ -443,8 +467,19 @@ export function RoomLobby({ roomId }: Props) {
     }
   }
 
+  const faqRole: "host" | "listener" | "panel" = isHost
+    ? "host"
+    : iAmLive
+      ? "panel"
+      : "listener";
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 pb-10 pt-0 sm:pt-6">
+      <RoomFaq
+        open={faqOpen}
+        onClose={() => setFaqOpen(false)}
+        role={faqRole}
+      />
       {/* Sticky bar: room link always visible — no scroll to share */}
       <div className="radio-sticky sticky top-0 z-40 -mx-4 border-b border-[#d4c4a8] bg-[#faf6ee]/95 px-4 py-3 backdrop-blur-md">
         <div className="flex items-center gap-3">
@@ -486,6 +521,22 @@ export function RoomLobby({ roomId }: Props) {
                 Share
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => {
+                setFaqBlink(false);
+                setFaqOpen(true);
+              }}
+              className={`min-h-11 rounded-xl border border-[#8b3a1a] px-3 py-2.5 text-sm font-semibold text-[#5c2814] sm:px-4 ${
+                faqBlink
+                  ? "trl-faq-blink border-[#c47a10] font-bold text-[#1c1410]"
+                  : "bg-[#f3e0c8] hover:bg-[#e8d0b0]"
+              }`}
+              aria-haspopup="dialog"
+              aria-expanded={faqOpen}
+            >
+              FAQ
+            </button>
             <button
               type="button"
               disabled={exiting}

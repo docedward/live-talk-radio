@@ -451,6 +451,30 @@ body {
   line-height: 1;
 }
 
+/* FAQ button attention pulse after join */
+@keyframes trl-faq-blink {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(154, 63, 28, 0.55);
+    background-color: #f3e0c8;
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(196, 122, 16, 0.35);
+    background-color: #ffe08a;
+  }
+}
+
+.trl-faq-blink {
+  animation: trl-faq-blink 0.7s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trl-faq-blink {
+    animation: none;
+    outline: 2px solid #c47a10;
+  }
+}
+
 .radio-screen h1,
 .radio-screen h2,
 .radio-heading {
