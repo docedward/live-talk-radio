@@ -36,6 +36,8 @@ type Props = {
  * Host-only: stock stings + Clip Board (user uploads).
  * Stock pads: existing SFX bus. Clips: IndexedDB + LiveKit temp track.
  */
+const BOARD_COOLDOWN_MS = 5000;
+
 export function HostSoundboard({ roomId }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +45,9 @@ export function HostSoundboard({ roomId }: Props) {
   const [clips, setClips] = useState<Map<number, StoredClip>>(new Map());
   const [voiceReady, setVoiceReady] = useState(isClipPublisherReady());
   const [clipPlaying, setClipPlaying] = useState(false);
+  /** Unix ms when stock pads unlock again (0 = ready). */
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [cooldownLeft, setCooldownLeft] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const uploadSlot = useRef<number | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -70,9 +75,33 @@ export function HostSoundboard({ roomId }: Props) {
     };
   }, [roomId]);
 
+  // Tick remaining cooldown for UI (seconds left)
+  useEffect(() => {
+    if (cooldownUntil <= 0) {
+      setCooldownLeft(0);
+      return;
+    }
+    const tick = () => {
+      const left = Math.max(0, cooldownUntil - Date.now());
+      setCooldownLeft(left);
+      if (left <= 0) setCooldownUntil(0);
+    };
+    tick();
+    const id = window.setInterval(tick, 200);
+    return () => window.clearInterval(id);
+  }, [cooldownUntil]);
+
+  const boardLocked = cooldownLeft > 0 || busy !== null;
+
   async function fireStock(id: HostSfxId, label: string) {
+    if (Date.now() < cooldownUntil) {
+      setError("Wait 5 seconds between soundboard hits.");
+      return;
+    }
     setError(null);
     setBusy(id);
+    // Lock immediately so double-taps cannot race
+    setCooldownUntil(Date.now() + BOARD_COOLDOWN_MS);
     await unlockRoomAudio();
     await unlockHostSfx();
     // Suppress LiveKit/REST echo of this press (server data has no isLocal)
@@ -194,6 +223,9 @@ export function HostSoundboard({ roomId }: Props) {
         </h2>
         <p className="radio-helper text-[11px]">
           Only you press. Everyone hears.
+          {cooldownLeft > 0
+            ? ` · Wait ${Math.ceil(cooldownLeft / 1000)}s`
+            : " · 5s between hits"}
         </p>
       </div>
 
@@ -202,16 +234,24 @@ export function HostSoundboard({ roomId }: Props) {
           <button
             key={b.id}
             type="button"
-            disabled={busy !== null}
+            disabled={boardLocked}
             onClick={() => void fireStock(b.id, b.label)}
-            title={b.label}
+            title={
+              cooldownLeft > 0
+                ? `Wait ${Math.ceil(cooldownLeft / 1000)}s`
+                : b.label
+            }
             className="flex min-h-11 flex-col items-center justify-center rounded-lg border border-amber-300 bg-white px-1 py-1.5 text-center shadow-sm active:scale-[0.97] disabled:opacity-50 dark:border-amber-800 dark:bg-zinc-900"
           >
             <span className="block text-base leading-none sm:text-lg">
               {b.emoji}
             </span>
             <span className="mt-0.5 block max-w-full truncate text-[10px] font-semibold leading-tight text-zinc-800 dark:text-zinc-100">
-              {busy === b.id ? "…" : b.label}
+              {busy === b.id
+                ? "…"
+                : cooldownLeft > 0
+                  ? `${Math.ceil(cooldownLeft / 1000)}s`
+                  : b.label}
             </span>
           </button>
         ))}
