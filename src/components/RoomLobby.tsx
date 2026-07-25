@@ -23,6 +23,7 @@ import { CardAvatarPicker } from "./CardAvatarPicker";
 import { PlayingCard } from "./PlayingCard";
 import { EmoteRail } from "./EmoteRail";
 import { RoomFaq } from "./RoomFaq";
+import { ShowBulletin } from "./ShowBulletin";
 import { unlockRoomAudio } from "@/lib/room-audio";
 
 type Props = {
@@ -87,6 +88,8 @@ export function RoomLobby({ roomId }: Props) {
   const [faqOpen, setFaqOpen] = useState(false);
   /** Blink FAQ button for 5s after entering the room. */
   const [faqBlink, setFaqBlink] = useState(false);
+  /** Chat demoted — collapsed by default (panel-first). */
+  const [chatOpen, setChatOpen] = useState(false);
 
   // Client-only boot: localStorage is never read during SSR
   useEffect(() => {
@@ -310,12 +313,12 @@ export function RoomLobby({ roomId }: Props) {
         await navigator.share({
           title,
           url,
-          text: `Join ${title}: ${url}`,
+          text: `Live right now — listen or request to join the panel: ${url}`,
         });
         setShareNote(
           isPublic
-            ? "Share sheet opened (public HTTPS link for remote guests)."
-            : "Shared — remote people need an https:// link, not localhost."
+            ? "Share sheet opened — guests can listen or request the panel."
+            : "Shared — remote people need an https:// link."
         );
         return;
       } catch {
@@ -358,20 +361,24 @@ export function RoomLobby({ roomId }: Props) {
           href="/"
           className="radio-lcd text-xs uppercase tracking-[0.14em] text-[#8b3a1a] hover:underline"
         >
-          ← Back to rooms
+          ← Back to shows
         </Link>
         <div className="rounded-2xl border border-[#d4c4a8] bg-[#fffdf8] p-6 shadow-sm">
           <p className="radio-lcd text-[0.65rem] uppercase tracking-[0.2em] text-[#8b3a1a]">
-            Studio entrance
+            Live only · no recording
           </p>
           <h1 className="mt-1 text-2xl tracking-wide text-[#1c1410]">
-            Join room
+            Join show
           </h1>
-          <p className="mt-1 text-sm text-[#6b5a48]">
-            Room code:{" "}
+          <p className="mt-1 text-sm text-[#4a3728]">
+            Show code:{" "}
             <span className="radio-lcd tracking-wider text-[#1c1410]">
               {roomId}
             </span>
+          </p>
+          <p className="mt-2 text-xs text-[#4a3728]">
+            You are here now. Request on air to join the panel and talk with the
+            host.
           </p>
 
           <label className="mt-4 flex flex-col gap-1.5 text-sm">
@@ -543,7 +550,7 @@ export function RoomLobby({ roomId }: Props) {
               onClick={() => void exitRoom()}
               className="min-h-11 rounded-xl border border-[#8b3a1a] bg-white px-3 py-2.5 text-sm font-semibold text-[#8b3a1a] hover:bg-[#fff8f0] disabled:opacity-50 sm:px-4"
             >
-              {exiting ? "Leaving…" : "Exit room"}
+              {exiting ? "Leaving…" : "Exit show"}
             </button>
           </div>
         </div>
@@ -575,23 +582,45 @@ export function RoomLobby({ roomId }: Props) {
             {shareNote}
           </p>
         )}
+        <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-[#8b3a1a]">
+          Live only · no recording · panel first
+        </p>
       </div>
+
+      {/* Day-of notice + bulletin (everyone sees notice) */}
+      <ShowBulletin
+        roomId={roomId}
+        isHost={isHost}
+        bulletin={snapshot.room.bulletin || ""}
+        dayNotice={snapshot.room.dayNotice || ""}
+        onUpdated={(fields) => {
+          setSnapshot((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  room: {
+                    ...prev.room,
+                    bulletin: fields.bulletin,
+                    dayNotice: fields.dayNotice,
+                  },
+                }
+              : prev
+          );
+        }}
+      />
 
       {isHost && !compact && (
         <div className="rounded-xl border border-[#d4a574] bg-[#f3e0c8] px-4 py-3 text-sm text-[#1c1410]">
-          <strong>You are the host.</strong> Approve questions. Add up to{" "}
-          {panelCap} guests to the speaker panel. Hold a Clip pad to upload
-          ads or prerecords.
+          <strong>You are the host.</strong> Put people on the panel so the
+          show is two-way. Up to {panelCap} guests. Chat is optional.
         </div>
       )}
 
       {controlNote && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+        <div className="rounded-xl border border-[#d4a574] bg-[#f3e0c8] px-4 py-3 text-sm text-[#1c1410]">
           {controlNote}
         </div>
       )}
-
-      {isHost && <HostSoundboard roomId={roomId} />}
 
       <RoomSfxPlayer
         roomId={roomId}
@@ -600,13 +629,14 @@ export function RoomLobby({ roomId }: Props) {
       />
 
       {iAmLive && (
-        <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-100">
+        <div className="rounded-xl border border-emerald-400 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-950">
           {voiceEnabled
-            ? "You are on the speaker panel — allow the mic if prompted. Use Mute mic if you need a break."
-            : "You are on the panel (status only — voice is not configured)."}
+            ? "You are on the panel. Unmute mic to talk."
+            : "You are on the panel (voice not configured on this server)."}
         </div>
       )}
 
+      {/* 1. Live sound — stage */}
       <VoiceStage
         roomId={roomId}
         enabled={voiceEnabled}
@@ -614,41 +644,67 @@ export function RoomLobby({ roomId }: Props) {
         hostMuted={hostMuted}
       />
 
-      <EmoteRail />
-
       {compact && (
         <p className="text-center text-sm text-[#4a3728]">
-          Just listening. Tap <strong>Full tools</strong> for chat, questions,
-          and On Air.
+          Just listening. Tap <strong>Full tools</strong> for panel request and
+          chat.
         </p>
       )}
 
       {!compact && (
         <>
+          {/* 2. Panel + On air (primary engagement) */}
+          <QuestionQueue
+            roomId={roomId}
+            role={snapshot.role}
+            initialQuestions={snapshot.questions}
+            initialOnAirRequests={snapshot.onAirRequests}
+            initialLivePanel={livePanel}
+            panelCap={panelCap}
+          />
+
+          {/* 3. Applause */}
+          <EmoteRail />
+
+          {/* 4. Host tools */}
+          {isHost && <HostSoundboard roomId={roomId} />}
+
+          {/* 5. Chat — collapsed by default */}
+          <div className="rounded-2xl border border-[#d4c4a8] bg-[#fffdf8]">
+            <button
+              type="button"
+              onClick={() => setChatOpen((o) => !o)}
+              className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-[#1c1410]"
+            >
+              <span>Chat (optional side talk)</span>
+              <span className="text-xs font-medium text-[#8b3a1a]">
+                {chatOpen ? "Hide" : "Show chat"}
+              </span>
+            </button>
+            {chatOpen && (
+              <div className="border-t border-[#d4c4a8] p-2">
+                <ChatPanel
+                  roomId={roomId}
+                  initialMessages={snapshot.messages}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* 6. Presence compact */}
           <PresenceSfx
             presence={snapshot.presence}
             myName={displayName || "Guest"}
             myRole={snapshot.role}
           />
-
           <PresencePanel
             presence={snapshot.presence}
             listenerCount={snapshot.listenerCount}
           />
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <ChatPanel roomId={roomId} initialMessages={snapshot.messages} />
-            <QuestionQueue
-              roomId={roomId}
-              role={snapshot.role}
-              initialQuestions={snapshot.questions}
-              initialOnAirRequests={snapshot.onAirRequests}
-              initialLivePanel={livePanel}
-              panelCap={panelCap}
-            />
-          </div>
         </>
       )}
+
+      {compact && <EmoteRail />}
     </div>
   );
 }

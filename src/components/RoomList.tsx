@@ -5,10 +5,10 @@ import Link from "next/link";
 import { fetchRooms, pingHealth, type PublicRoom } from "@/lib/api";
 
 /**
- * Open rooms list — uses plain HTTP (works on phones even when Socket.io cannot).
+ * Open shows list — plain HTTP (works on phones even when Socket.io cannot).
  */
 export function RoomList() {
-  const [rooms, setRooms] = useState<PublicRoom[]>([]);
+  const [shows, setShows] = useState<PublicRoom[]>([]);
   const [status, setStatus] = useState<"loading" | "online" | "error">(
     "loading"
   );
@@ -22,13 +22,13 @@ export function RoomList() {
         await pingHealth();
         const list = await fetchRooms();
         if (cancelled) return;
-        setRooms(list);
+        setShows(list);
         setStatus("online");
         setError(null);
       } catch (err) {
         if (cancelled) return;
         setStatus("error");
-        setError(err instanceof Error ? err.message : "Could not load rooms");
+        setError(err instanceof Error ? err.message : "Could not load shows");
       }
     }
 
@@ -45,13 +45,14 @@ export function RoomList() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="radio-lcd text-[0.65rem] uppercase tracking-[0.2em] text-[#8b3a1a]">
-            Dial-in board
+            Live now
           </p>
           <h2 className="mt-1 text-xl tracking-wide text-[#1c1410]">
-            Open rooms
+            Open shows
           </h2>
-          <p className="mt-1 text-sm text-[#6b5a48]">
-            Join as a listener — or open a share link someone sent you.
+          <p className="mt-1 text-sm text-[#4a3728]">
+            Join as a listener, or open a share link. Request on air to join the
+            panel.
           </p>
         </div>
         <span
@@ -77,28 +78,24 @@ export function RoomList() {
         </p>
       )}
 
-      {rooms.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-zinc-300 px-4 py-8 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-          No rooms yet. Create one to get started.
+      {shows.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-[#d4c4a8] px-4 py-8 text-center text-sm text-[#4a3728]">
+          No shows live right now. Create one to get started.
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
-          {rooms.map((room) => (
-            <li key={room.id}>
+          {shows.map((show) => (
+            <li key={show.id}>
               <Link
-                href={`/room/${room.id}`}
-                className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 px-4 py-3 transition hover:border-violet-300 hover:bg-violet-50 dark:border-zinc-800 dark:hover:border-violet-700 dark:hover:bg-violet-950/40"
+                href={`/room/${show.id}`}
+                className="flex items-center justify-between gap-3 rounded-xl border border-[#d4c4a8] px-4 py-3 transition hover:border-[#9a3f1c] hover:bg-[#f3e0c8]/50"
               >
                 <div>
-                  <p className="font-medium text-zinc-900 dark:text-zinc-50">
-                    {room.name}
-                  </p>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                    Code: {room.id}
-                  </p>
+                  <p className="font-medium text-[#1c1410]">{show.name}</p>
+                  <p className="text-xs text-[#6b5a48]">Code: {show.id}</p>
                 </div>
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                  {room.listenerCount} listening
+                <span className="text-xs font-semibold text-[#8b3a1a]">
+                  {show.listenerCount} listening
                 </span>
               </Link>
             </li>

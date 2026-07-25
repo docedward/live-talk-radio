@@ -7,11 +7,11 @@ import { pickFreeCard, type CardId } from "@/lib/card-avatars";
 import { CardAvatarPicker } from "./CardAvatarPicker";
 
 /**
- * Host form: name the room, create it via HTTP, open the room.
+ * Host form: name the show, create it, open it.
  */
 export function CreateRoomForm() {
   const router = useRouter();
-  const [roomName, setRoomName] = useState("");
+  const [showName, setShowName] = useState("");
   const [hostName, setHostName] = useState("");
   const [avatarId, setAvatarId] = useState<CardId | null>(null);
   const [busy, setBusy] = useState(false);
@@ -34,7 +34,7 @@ export function CreateRoomForm() {
     try {
       const card = avatarId || pickFreeCard([]);
       const result = await createRoom(
-        roomName,
+        showName,
         hostName || "Host",
         card
       );
@@ -66,39 +66,36 @@ export function CreateRoomForm() {
     >
       <div>
         <p className="radio-lcd text-[0.65rem] uppercase tracking-[0.2em] text-[#8b3a1a]">
-          Host booth
+          Host booth · live only
         </p>
         <h2 className="mt-1 text-xl tracking-wide text-[#1c1410]">
-          Create a room
+          Create a show
         </h2>
-        <p className="mt-1 text-sm text-[#6b5a48]">
-          You become the host. Share the link so listeners can join.
+        <p className="mt-1 text-sm text-[#4a3728]">
+          You are the host. Put listeners on the panel to talk with you. Nothing
+          is recorded.
         </p>
       </div>
 
       <label className="flex flex-col gap-1.5 text-sm">
-        <span className="font-medium text-zinc-800 dark:text-zinc-200">
-          Your name
-        </span>
+        <span className="font-medium text-[#1c1410]">Your name</span>
         <input
           value={hostName}
           onChange={(e) => setHostName(e.target.value)}
           placeholder="e.g. Dr. Ed"
-          className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-900 outline-none ring-violet-500 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+          className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-900 outline-none ring-violet-500 focus:ring-2"
           maxLength={40}
         />
       </label>
 
       <label className="flex flex-col gap-1.5 text-sm">
-        <span className="font-medium text-zinc-800 dark:text-zinc-200">
-          Room name
-        </span>
+        <span className="font-medium text-[#1c1410]">Show name</span>
         <input
-          value={roomName}
-          onChange={(e) => setRoomName(e.target.value)}
+          value={showName}
+          onChange={(e) => setShowName(e.target.value)}
           placeholder="e.g. Friday Night Q&A"
           required
-          className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-900 outline-none ring-violet-500 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+          className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-900 outline-none ring-violet-500 focus:ring-2"
           maxLength={80}
         />
       </label>
@@ -125,10 +122,10 @@ export function CreateRoomForm() {
 
       <button
         type="submit"
-        disabled={busy || !roomName.trim()}
+        disabled={busy || !showName.trim()}
         className="rounded-xl bg-[#9a3f1c] px-4 py-2.5 text-sm font-semibold text-[#fff8f0] transition hover:bg-[#b34d24] disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {busy ? "Creating…" : "Create room & go live"}
+        {busy ? "Creating…" : "Create show & go live"}
       </button>
     </form>
   );

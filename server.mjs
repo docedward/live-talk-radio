@@ -245,7 +245,7 @@ function countListeners(state) {
   return n;
 }
 
-/** Playing-card avatars: "AS", "7H", "10D", "KC", etc. */
+/** Playing-card avatars: "AS", "KC", "QH", "JR"/"JB" jokers, etc. */
 const CARD_RANKS = new Set([
   "A",
   "2",
@@ -262,16 +262,24 @@ const CARD_RANKS = new Set([
   "K",
 ]);
 const CARD_SUITS = ["S", "H", "D", "C"];
-const FULL_DECK = CARD_SUITS.flatMap((s) =>
-  ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"].map(
-    (r) => `${r}${s}`
-  )
-);
+const FULL_DECK = [
+  ...CARD_SUITS.flatMap((s) =>
+    ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"].map(
+      (r) => `${r}${s}`
+    )
+  ),
+  "JR",
+  "JB",
+];
 const CARD_RE = /^(A|10|[2-9JQK])([SHDC])$/i;
+const JOKER_RE = /^J([RB])$/i;
 
 function normalizeCardId(raw) {
   if (raw == null || raw === "") return null;
-  const m = String(raw).trim().toUpperCase().match(CARD_RE);
+  const u = String(raw).trim().toUpperCase();
+  const j = u.match(JOKER_RE);
+  if (j) return `J${j[1].toUpperCase()}`;
+  const m = u.match(CARD_RE);
   if (!m) return null;
   if (!CARD_RANKS.has(m[1])) return null;
   return `${m[1]}${m[2]}`;
@@ -314,7 +322,7 @@ function presenceList(state) {
 
 function createRoom(name) {
   const trimmed = String(name || "").trim();
-  if (!trimmed) throw new Error("Room name is required");
+  if (!trimmed) throw new Error("Show name is required");
 
   let id = makeRoomId();
   while (rooms.has(id)) id = makeRoomId();
@@ -324,6 +332,8 @@ function createRoom(name) {
     name: trimmed.slice(0, 80),
     hostToken: makeHostToken(),
     createdAt: Date.now(),
+    bulletin: "",
+    dayNotice: "",
   };
 
   rooms.set(id, {
@@ -336,6 +346,21 @@ function createRoom(name) {
   });
 
   return room;
+}
+
+/** Host: weekly-ish bulletin + day-of emergency notice (ephemeral with room). */
+function setRoomPresence(roomId, hostMemberId, { bulletin, dayNotice }) {
+  const { state } = requireHostMember(roomId, hostMemberId);
+  if (bulletin !== undefined) {
+    state.room.bulletin = String(bulletin || "").trim().slice(0, 500);
+  }
+  if (dayNotice !== undefined) {
+    state.room.dayNotice = String(dayNotice || "").trim().slice(0, 200);
+  }
+  return {
+    bulletin: state.room.bulletin || "",
+    dayNotice: state.room.dayNotice || "",
+  };
 }
 
 const HOST_SFX_IDS = new Set([
@@ -486,6 +511,8 @@ function buildSnapshot(roomId, role) {
       id: state.room.id,
       name: state.room.name,
       createdAt: state.room.createdAt,
+      bulletin: state.room.bulletin || "",
+      dayNotice: state.room.dayNotice || "",
     },
     role,
     messages: [...state.messages],
@@ -914,6 +941,26 @@ async function handleApi(req, res, pathname, query, bodyPromise) {
       const memberId = sessionIdFrom(req, body, query);
       const lastSfx = triggerSfx(roomId, memberId, body.sound);
       sendJson(res, 200, { ok: true, lastSfx });
+      return true;
+    }
+
+    // POST /api/rooms/:id/presence — host bulletin + day notice
+    const presenceMatch = pathname.match(
+      /^\/api\/rooms\/([^/]+)\/presence$/
+    );
+    if (presenceMatch && req.method === "POST") {
+      const roomId = decodeURIComponent(presenceMatch[1]);
+      const memberId = sessionIdFrom(req, body, query);
+      const presence = setRoomPresence(roomId, memberId, {
+        bulletin: body.bulletin,
+        dayNotice: body.dayNotice,
+      });
+      const { member } = requireMember(roomId, memberId);
+      sendJson(res, 200, {
+        ok: true,
+        ...presence,
+        snapshot: publicSnapshot(roomId, member.role, memberId),
+      });
       return true;
     }
 

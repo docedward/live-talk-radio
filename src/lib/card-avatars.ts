@@ -1,6 +1,7 @@
 /**
- * Premade playing-card avatars for panel / room identity.
- * IDs look like "AS" (Ace of Spades), "7H" (7 of Hearts), "10D", "KC".
+ * Playing-card avatars for show identity.
+ * Suit cards: "AS", "7H", "10D", "KC", "QH", "JS"
+ * Jokers: "JR" (red), "JB" (black)
  */
 
 export type CardSuit = "S" | "H" | "D" | "C";
@@ -19,15 +20,20 @@ export type CardRank =
   | "Q"
   | "K";
 
-export type CardId = `${CardRank}${CardSuit}`;
+export type JokerId = "JR" | "JB";
+export type CardId = `${CardRank}${CardSuit}` | JokerId;
 
-export const SUITS: { id: CardSuit; symbol: string; name: string; red: boolean }[] =
-  [
-    { id: "S", symbol: "♠", name: "Spades", red: false },
-    { id: "H", symbol: "♥", name: "Hearts", red: true },
-    { id: "D", symbol: "♦", name: "Diamonds", red: true },
-    { id: "C", symbol: "♣", name: "Clubs", red: false },
-  ];
+export const SUITS: {
+  id: CardSuit;
+  symbol: string;
+  name: string;
+  red: boolean;
+}[] = [
+  { id: "S", symbol: "♠", name: "Spades", red: false },
+  { id: "H", symbol: "♥", name: "Hearts", red: true },
+  { id: "D", symbol: "♦", name: "Diamonds", red: true },
+  { id: "C", symbol: "♣", name: "Clubs", red: false },
+];
 
 export const RANKS: CardRank[] = [
   "A",
@@ -45,21 +51,53 @@ export const RANKS: CardRank[] = [
   "K",
 ];
 
-/** Full 52-card deck, suit-major order (♠♥♦♣). */
-export const FULL_DECK: CardId[] = SUITS.flatMap((s) =>
-  RANKS.map((r) => `${r}${s.id}` as CardId)
-);
+/** Face / people cards first in picker sections */
+export const FACE_RANKS: CardRank[] = ["K", "Q", "J"];
+export const PIP_RANKS: CardRank[] = [
+  "A",
+  "2",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8",
+  "9",
+  "10",
+];
 
-const CARD_RE = /^(A|10|[2-9JQK])([SHDC])$/;
+export const JOKERS: { id: JokerId; label: string; red: boolean }[] = [
+  { id: "JR", label: "Red Joker", red: true },
+  { id: "JB", label: "Black Joker", red: false },
+];
 
-export function parseCardId(id: string | null | undefined): {
-  rank: CardRank;
-  suit: CardSuit;
-} | null {
+/** 52 suit cards + 2 jokers */
+export const FULL_DECK: CardId[] = [
+  ...SUITS.flatMap((s) => RANKS.map((r) => `${r}${s.id}` as CardId)),
+  ...JOKERS.map((j) => j.id),
+];
+
+const SUIT_RE = /^(A|10|[2-9JQK])([SHDC])$/;
+const JOKER_RE = /^J([RB])$/;
+
+export function isJokerId(id: string | null | undefined): id is JokerId {
+  return id === "JR" || id === "JB";
+}
+
+export function parseCardId(id: string | null | undefined):
+  | { kind: "suit"; rank: CardRank; suit: CardSuit }
+  | { kind: "joker"; id: JokerId; red: boolean }
+  | null {
   if (!id) return null;
-  const m = String(id).trim().toUpperCase().match(CARD_RE);
+  const raw = String(id).trim().toUpperCase();
+  const j = raw.match(JOKER_RE);
+  if (j) {
+    const jid = `J${j[1]}` as JokerId;
+    return { kind: "joker", id: jid, red: j[1] === "R" };
+  }
+  const m = raw.match(SUIT_RE);
   if (!m) return null;
-  return { rank: m[1] as CardRank, suit: m[2] as CardSuit };
+  return { kind: "suit", rank: m[1] as CardRank, suit: m[2] as CardSuit };
 }
 
 export function isValidCardId(id: string | null | undefined): id is CardId {
@@ -69,6 +107,7 @@ export function isValidCardId(id: string | null | undefined): id is CardId {
 export function normalizeCardId(id: string | null | undefined): CardId | null {
   const p = parseCardId(id);
   if (!p) return null;
+  if (p.kind === "joker") return p.id;
   return `${p.rank}${p.suit}` as CardId;
 }
 
@@ -76,9 +115,14 @@ export function suitMeta(suit: CardSuit) {
   return SUITS.find((s) => s.id === suit)!;
 }
 
+export function isFaceRank(rank: CardRank): boolean {
+  return rank === "J" || rank === "Q" || rank === "K";
+}
+
 export function cardLabel(id: string | null | undefined): string {
   const p = parseCardId(id);
   if (!p) return "Card";
+  if (p.kind === "joker") return p.red ? "Red Joker" : "Black Joker";
   const suit = suitMeta(p.suit);
   const rankName =
     p.rank === "A"
@@ -96,10 +140,10 @@ export function cardLabel(id: string | null | undefined): string {
 export function cardShortLabel(id: string | null | undefined): string {
   const p = parseCardId(id);
   if (!p) return "?";
+  if (p.kind === "joker") return p.red ? "🃏R" : "🃏B";
   return `${p.rank}${suitMeta(p.suit).symbol}`;
 }
 
-/** Pick a free card (not in taken set); falls back to any valid deck card. */
 export function pickFreeCard(taken: Iterable<string>): CardId {
   const used = new Set(
     Array.from(taken)

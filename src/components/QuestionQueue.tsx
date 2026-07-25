@@ -233,13 +233,13 @@ export function QuestionQueue({
   return (
     <section className="flex h-[28rem] shrink-0 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white sm:h-[32rem] dark:border-zinc-800 dark:bg-zinc-950">
       <header className="shrink-0 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-          Questions &amp; speaker panel
+        <h2 className="text-sm font-semibold text-[#1c1410]">
+          Speaker panel · join the show
         </h2>
         <p className="radio-helper text-xs">
           {role === "host"
-            ? `Approve questions. Tap a green name to mute/unmute (up to ${cap} guests).`
-            : "Ask a question, or tap Request On Air to join the speaker panel."}
+            ? `Panel is the main stage. Tap a green name to mute/unmute (up to ${cap} guests). Questions are secondary.`
+            : "Request on air to talk with the host. Asking a text question is optional."}
         </p>
       </header>
 
@@ -540,11 +540,10 @@ export function QuestionQueue({
                   onClick={() => void onRequestOnAirNow()}
                   className="mt-2 min-h-11 w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-40"
                 >
-                  Request On Air
+                  Request on air
                 </button>
                 <p className="radio-helper mt-1.5 text-xs">
-                  One tap sends the request to the host. Optional: type a short
-                  topic above first.
+                  Join the panel and talk with the host. Optional topic above.
                 </p>
               </>
             )}

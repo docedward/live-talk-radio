@@ -17,8 +17,8 @@ export function RadioShell({ children }: { children: ReactNode }) {
             <span className="radio-knob radio-knob-sm" />
           </div>
           <div className="radio-brand-center">
-            <p className="radio-callsign">W-LTR · AM</p>
-            <h1 className="radio-title">Live Talk Radio</h1>
+            <p className="radio-callsign">W-LTR · LIVE ONLY</p>
+            <h1 className="radio-title">Talk Radio Live</h1>
           </div>
           <div className="radio-onair" title="Station live">
             <span className="radio-onair-led" aria-hidden />
@@ -59,7 +59,7 @@ export function RadioShell({ children }: { children: ReactNode }) {
         {/* Bottom speaker grille */}
         <footer className="radio-grille" aria-hidden>
           <div className="radio-grille-mesh" />
-          <p className="radio-grille-tag">STEREO · TALK · CALL-IN</p>
+          <p className="radio-grille-tag">LIVE · PANEL · NO RECORDING</p>
         </footer>
       </div>
     </div>

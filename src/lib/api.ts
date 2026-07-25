@@ -76,6 +76,22 @@ export function createRoom(name: string, hostName: string, avatarId?: string) {
   });
 }
 
+/** Host: set bulletin / day-of notice for the live show. */
+export function updateShowPresence(
+  roomId: string,
+  fields: { bulletin?: string; dayNotice?: string }
+) {
+  return api<{
+    ok: true;
+    bulletin: string;
+    dayNotice: string;
+    snapshot: RoomSnapshot;
+  }>(`/api/rooms/${encodeURIComponent(roomId)}/presence`, {
+    method: "POST",
+    body: JSON.stringify(fields),
+  });
+}
+
 export function joinRoom(
   roomId: string,
   displayName: string,

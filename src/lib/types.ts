@@ -96,14 +96,20 @@ export interface Room {
   name: string;
   hostToken: string;
   createdAt: number;
+  bulletin?: string;
+  dayNotice?: string;
 }
 
-/** What the UI needs for a room once someone has joined. */
+/** What the UI needs for a show once someone has joined. */
 export interface RoomSnapshot {
   room: {
     id: string;
     name: string;
     createdAt: number;
+    /** Host “this week” note (lives with the show process). */
+    bulletin?: string;
+    /** Day-of cancel / late / reschedule banner. */
+    dayNotice?: string;
   };
   role: Role;
   messages: ChatMessage[];
