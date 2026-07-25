@@ -14,6 +14,8 @@ import {
   RoomEvent,
   Track,
   DefaultReconnectPolicy,
+  type LocalParticipant,
+  type LocalTrackPublication,
 } from "livekit-client";
 import { fetchVoiceToken } from "@/lib/api";
 import { isHostSfxId, playHostSfx } from "@/lib/host-sfx";
@@ -25,8 +27,19 @@ import {
   toggleRoomOutputMuted,
   unlockRoomAudio,
 } from "@/lib/room-audio";
-import { setClipPublisher } from "@/lib/clip-publish-bus";
+import {
+  registerActiveClipStop,
+  setClipPublisher,
+} from "@/lib/clip-publish-bus";
 import { receiveEmote, setEmoteSender } from "@/lib/emote-bus";
+import {
+  loadMicFilter,
+  MIC_FILTER_OPTIONS,
+  saveMicFilter,
+  startMicFilterSession,
+  type MicFilterId,
+  type MicFilterSession,
+} from "@/lib/mic-filter";
 import { SpeakingStrip } from "./SpeakingStrip";
 
 type Props = {
@@ -279,6 +292,20 @@ export function VoiceStage({
   );
 }
 
+/** Soft-duck host/panel mic tracks while a clip is in the air. */
+function setMicDucked(localParticipant: LocalParticipant, duck: boolean) {
+  localParticipant.audioTrackPublications.forEach((pub) => {
+    if (pub.source !== Track.Source.Microphone) return;
+    const mst = pub.track?.mediaStreamTrack;
+    if (mst) mst.enabled = !duck;
+  });
+  // Filtered sessions also expose setDuck via window bridge
+  const duckFn = (
+    window as unknown as { __trlMicDuck?: (d: boolean) => void }
+  ).__trlMicDuck;
+  if (duckFn) duckFn(duck);
+}
+
 /**
  * Registers a LiveKit publisher so Host Clip Board can inject prerecorded
  * audio into the room (outside the LiveKitRoom React tree).
@@ -291,6 +318,7 @@ function ClipPublisherBridge({ canPublish }: { canPublish: boolean }) {
   useEffect(() => {
     if (!canPublish || !connected || !localParticipant) {
       setClipPublisher(null);
+      registerActiveClipStop(null);
       return;
     }
 
@@ -305,19 +333,15 @@ function ClipPublisherBridge({ canPublish }: { canPublish: boolean }) {
 
       const dest = ac.createMediaStreamDestination();
       const src = ac.createBufferSource();
-      // Resample into context rate if needed via OfflineAudioContext path
       let playBuf = buffer;
       if (buffer.sampleRate !== ac.sampleRate) {
-        const frames = Math.ceil(
-          buffer.duration * ac.sampleRate
-        );
+        const frames = Math.ceil(buffer.duration * ac.sampleRate);
         const offline = new OfflineAudioContext(1, frames, ac.sampleRate);
-        const ob = offline.createBuffer(
-          1,
-          buffer.length,
-          buffer.sampleRate
-        );
-        ob.copyToChannel(buffer.getChannelData(0), 0);
+        const ob = offline.createBuffer(1, buffer.length, buffer.sampleRate);
+        const ch = ob.getChannelData(0);
+        const srcCh = buffer.getChannelData(0);
+        const n = Math.min(ch.length, srcCh.length);
+        for (let i = 0; i < n; i++) ch[i] = srcCh[i]!;
         const os = offline.createBufferSource();
         os.buffer = ob;
         os.connect(offline.destination);
@@ -330,7 +354,6 @@ function ClipPublisherBridge({ canPublish }: { canPublish: boolean }) {
       g.gain.value = 0.95;
       src.connect(g);
       g.connect(dest);
-      // Host monitors locally (room mix may not loop back)
       g.connect(ac.destination);
 
       const mediaTrack = dest.stream.getAudioTracks()[0];
@@ -339,9 +362,53 @@ function ClipPublisherBridge({ canPublish }: { canPublish: boolean }) {
         throw new Error("Could not create clip track");
       }
 
-      const publication = await localParticipant.publishTrack(mediaTrack, {
-        name: "trl-clip",
-        source: Track.Source.Unknown,
+      // Duck live mic under the ad/clip
+      setMicDucked(localParticipant, true);
+
+      let publication: LocalTrackPublication | undefined;
+      try {
+        publication = await localParticipant.publishTrack(mediaTrack, {
+          name: "trl-clip",
+          source: Track.Source.Unknown,
+        });
+      } catch (err) {
+        setMicDucked(localParticipant, false);
+        void ac.close().catch(() => undefined);
+        throw err instanceof Error
+          ? err
+          : new Error("Could not publish clip to room");
+      }
+
+      let settled = false;
+      const finish = async () => {
+        if (settled) return;
+        settled = true;
+        registerActiveClipStop(null);
+        try {
+          src.stop();
+        } catch {
+          /* already stopped */
+        }
+        try {
+          if (publication?.track) {
+            await localParticipant.unpublishTrack(publication.track);
+          } else {
+            await localParticipant.unpublishTrack(mediaTrack);
+          }
+        } catch {
+          /* ignore */
+        }
+        try {
+          mediaTrack.stop();
+        } catch {
+          /* ignore */
+        }
+        setMicDucked(localParticipant, false);
+        void ac.close().catch(() => undefined);
+      };
+
+      registerActiveClipStop(() => {
+        void finish();
       });
 
       await new Promise<void>((resolve, reject) => {
@@ -353,25 +420,12 @@ function ClipPublisherBridge({ canPublish }: { canPublish: boolean }) {
         }
       });
 
-      try {
-        if (publication?.track) {
-          await localParticipant.unpublishTrack(publication.track);
-        } else {
-          await localParticipant.unpublishTrack(mediaTrack);
-        }
-      } catch {
-        /* ignore */
-      }
-      try {
-        mediaTrack.stop();
-      } catch {
-        /* ignore */
-      }
-      void ac.close().catch(() => undefined);
+      await finish();
     });
 
     return () => {
       setClipPublisher(null);
+      registerActiveClipStop(null);
     };
   }, [canPublish, connected, localParticipant]);
 
@@ -554,6 +608,9 @@ function VoiceChrome({
   const [soundMuted, setSoundMuted] = useState(isRoomOutputMuted());
   /** Only auto-enable mic once per connection. */
   const didAutoEnableMic = useRef(false);
+  const [micFilter, setMicFilter] = useState<MicFilterId>("off");
+  const filterSession = useRef<MicFilterSession | null>(null);
+  const filteredPub = useRef<LocalTrackPublication | null>(null);
 
   const connected = connectionState === ConnectionState.Connected;
   const connecting =
@@ -561,17 +618,88 @@ function VoiceChrome({
     connectionState === ConnectionState.Reconnecting;
 
   useEffect(() => {
+    setMicFilter(loadMicFilter());
+  }, []);
+
+  useEffect(() => {
     return subscribeRoomAudio(() => {
       setSoundMuted(isRoomOutputMuted());
     });
   }, []);
+
+  // Expose duck for clip board (filtered sessions)
+  useEffect(() => {
+    (
+      window as unknown as { __trlMicDuck?: (d: boolean) => void }
+    ).__trlMicDuck = (duck: boolean) => {
+      filterSession.current?.setDuck(duck);
+    };
+    return () => {
+      delete (window as unknown as { __trlMicDuck?: (d: boolean) => void })
+        .__trlMicDuck;
+    };
+  }, []);
+
+  async function tearDownFilteredMic() {
+    const session = filterSession.current;
+    const pub = filteredPub.current;
+    filterSession.current = null;
+    filteredPub.current = null;
+    if (pub?.track && localParticipant) {
+      try {
+        await localParticipant.unpublishTrack(pub.track);
+      } catch {
+        /* ignore */
+      }
+    }
+    session?.stop();
+  }
+
+  /** Publish mic: clean LiveKit path OR WebAudio filter track. */
+  async function enableMic(filter: MicFilterId) {
+    if (!localParticipant) return;
+    await tearDownFilteredMic();
+    // Drop any default LK mic first
+    try {
+      await localParticipant.setMicrophoneEnabled(false);
+    } catch {
+      /* ignore */
+    }
+
+    if (filter === "off") {
+      await localParticipant.setMicrophoneEnabled(true);
+      return;
+    }
+
+    const session = await startMicFilterSession(filter);
+    filterSession.current = session;
+    const publication = await localParticipant.publishTrack(
+      session.outputTrack,
+      {
+        name: "microphone",
+        source: Track.Source.Microphone,
+      }
+    );
+    filteredPub.current = publication ?? null;
+  }
+
+  async function disableMic() {
+    if (!localParticipant) return;
+    if (filterSession.current) {
+      await tearDownFilteredMic();
+      return;
+    }
+    await localParticipant.setMicrophoneEnabled(false);
+  }
 
   // Reset one-shot flags when we leave the room connection
   useEffect(() => {
     if (!connected) {
       didAutoEnableMic.current = false;
       setMicOn(false);
+      void tearDownFilteredMic();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected]);
 
   // Count remote audio tracks (are we actually receiving anyone?)
@@ -634,7 +762,7 @@ function VoiceChrome({
     let cancelled = false;
     (async () => {
       try {
-        await localParticipant.setMicrophoneEnabled(true);
+        await enableMic(loadMicFilter());
         if (!cancelled) {
           didAutoEnableMic.current = true;
           setMicOn(true);
@@ -653,24 +781,26 @@ function VoiceChrome({
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, canPublish, hostMuted, localParticipant, mobile]);
 
   useEffect(() => {
     if (!localParticipant) return;
-    if ((!canPublish || hostMuted) && isMicrophoneEnabled) {
-      void localParticipant.setMicrophoneEnabled(false);
+    if ((!canPublish || hostMuted) && (isMicrophoneEnabled || micOn)) {
+      void disableMic();
       setMicOn(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canPublish, hostMuted, isMicrophoneEnabled, localParticipant]);
 
   async function forceMicOn() {
     if (!localParticipant || !canPublish || hostMuted) return;
     setMicError(null);
     try {
-      await localParticipant.setMicrophoneEnabled(false);
+      await disableMic();
       setMicOn(false);
       await new Promise((r) => setTimeout(r, 200));
-      await localParticipant.setMicrophoneEnabled(true);
+      await enableMic(micFilter);
       setMicOn(true);
       didAutoEnableMic.current = true;
     } catch {
@@ -685,14 +815,26 @@ function VoiceChrome({
     if (!localParticipant || !canPublish || hostMuted) return;
     setMicError(null);
     const turnOn = !micOn;
-    // Optimistic UI so the button never looks "stuck black"
     setMicOn(turnOn);
     try {
-      await localParticipant.setMicrophoneEnabled(turnOn);
+      if (turnOn) await enableMic(micFilter);
+      else await disableMic();
       didAutoEnableMic.current = true;
     } catch {
       setMicOn(!turnOn);
       setMicError("Could not access the microphone.");
+    }
+  }
+
+  async function onFilterChange(next: MicFilterId) {
+    setMicFilter(next);
+    saveMicFilter(next);
+    if (!localParticipant || !canPublish || hostMuted || !micOn) return;
+    setMicError(null);
+    try {
+      await enableMic(next);
+    } catch {
+      setMicError("Could not apply mic filter — try Restart mic.");
     }
   }
 
@@ -772,6 +914,29 @@ function VoiceChrome({
           )}
         </div>
       </div>
+
+      {canPublish && !hostMuted && connected && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="radio-helper text-[11px] font-semibold uppercase tracking-wide">
+            Mic color
+          </span>
+          {MIC_FILTER_OPTIONS.map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              title={opt.hint}
+              onClick={() => void onFilterChange(opt.id)}
+              className={`min-h-9 rounded-lg border px-2.5 py-1 text-xs font-semibold ${
+                micFilter === opt.id
+                  ? "border-emerald-600 bg-emerald-100 text-emerald-950"
+                  : "border-[#d4c4a8] bg-white text-[#3d2a1a] hover:bg-[#f3e0c8]"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {micError && (
         <p className="text-xs text-red-700 dark:text-red-300">{micError}</p>

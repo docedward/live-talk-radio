@@ -12,6 +12,7 @@ import { triggerRoomSfx } from "@/lib/api";
 import { unlockRoomAudio } from "@/lib/room-audio";
 import {
   CLIP_SLOT_COUNT,
+  MAX_CLIP_SECONDS,
   clearClip,
   decodeAndNormalizeClip,
   loadClipsForRoom,
@@ -21,6 +22,8 @@ import {
 } from "@/lib/custom-sfx";
 import {
   isClipPublisherReady,
+  stopClipPlayback,
+  subscribeClipPlaying,
   subscribeClipPublisherReady,
 } from "@/lib/clip-publish-bus";
 
@@ -38,6 +41,7 @@ export function HostSoundboard({ roomId }: Props) {
   const [last, setLast] = useState<string | null>(null);
   const [clips, setClips] = useState<Map<number, StoredClip>>(new Map());
   const [voiceReady, setVoiceReady] = useState(isClipPublisherReady());
+  const [clipPlaying, setClipPlaying] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const uploadSlot = useRef<number | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -49,6 +53,10 @@ export function HostSoundboard({ roomId }: Props) {
 
   useEffect(() => {
     return subscribeClipPublisherReady(setVoiceReady);
+  }, []);
+
+  useEffect(() => {
+    return subscribeClipPlaying(setClipPlaying);
   }, []);
 
   useEffect(() => {
@@ -98,7 +106,9 @@ export function HostSoundboard({ roomId }: Props) {
       await saveClip(roomId, slot, decoded);
       const map = await loadClipsForRoom(roomId);
       setClips(map);
-      setLast(`Loaded: ${decoded.name}`);
+      setLast(
+        `Loaded “${decoded.name}” (${decoded.duration.toFixed(1)}s) · Clip ${slot + 1}`
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -113,14 +123,25 @@ export function HostSoundboard({ roomId }: Props) {
       openUpload(slot);
       return;
     }
+    if (!voiceReady) {
+      setError(
+        "Connect Live sound first (scroll to Live sound), then play the clip so the room hears it."
+      );
+      return;
+    }
     setError(null);
     setBusy(`clip-${slot}`);
     try {
       await unlockRoomAudio();
       await playStoredClip(clip);
-      setLast(clip.name);
+      setLast(`Played “${clip.name}”`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not play clip");
+      const msg = err instanceof Error ? err.message : "Could not play clip";
+      setError(
+        /publish|track|Live/i.test(msg)
+          ? `${msg} — try Restart mic under Live sound, then play again.`
+          : msg
+      );
     } finally {
       setBusy(null);
     }
@@ -196,16 +217,30 @@ export function HostSoundboard({ roomId }: Props) {
 
       {/* Clip Board — prerecords / ads */}
       <div className="mt-3 border-t border-amber-200/80 pt-2 dark:border-amber-900">
-        <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-1">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-950 dark:text-amber-100">
-            Clip board · ads &amp; prerecords
-          </h3>
-          <p className="radio-helper text-[10px]">
-            {voiceReady
-              ? "Click play · hold / right-click load file"
-              : "Connect Live sound to play into the room"}
-          </p>
+        <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-950 dark:text-amber-100">
+              Clip board · ads &amp; prerecords
+            </h3>
+            <p className="radio-helper mt-0.5 text-[10px]">
+              Max {MAX_CLIP_SECONDS}s · mp3/wav/m4a/ogg · mic ducks under clip
+            </p>
+          </div>
+          {clipPlaying && (
+            <button
+              type="button"
+              onClick={() => stopClipPlayback()}
+              className="min-h-9 shrink-0 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-500"
+            >
+              Stop clip
+            </button>
+          )}
         </div>
+        <p className="radio-helper mb-1.5 text-[10px]">
+          {voiceReady
+            ? "Click = play · hold / right-click = load · Shift+click = clear"
+            : "Connect Live sound below first — then clips play into the room"}
+        </p>
         <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
           {Array.from({ length: CLIP_SLOT_COUNT }, (_, slot) => {
             const clip = clips.get(slot);
@@ -217,7 +252,7 @@ export function HostSoundboard({ roomId }: Props) {
                 disabled={busy !== null}
                 title={
                   clip
-                    ? `${clip.name} — click play, right-click replace, Shift+click clear`
+                    ? `${clip.name} (${clip.duration.toFixed(1)}s) — click play, right-click replace, Shift+click clear`
                     : "Empty — click or hold to upload audio"
                 }
                 onClick={(e) => {
@@ -260,6 +295,11 @@ export function HostSoundboard({ roomId }: Props) {
                       ? clip.name
                       : `Clip ${slot + 1}`}
                 </span>
+                {clip && (
+                  <span className="text-[9px] font-medium text-zinc-600">
+                    {clip.duration.toFixed(1)}s
+                  </span>
+                )}
               </button>
             );
           })}
@@ -270,7 +310,9 @@ export function HostSoundboard({ roomId }: Props) {
         <p className="radio-helper mt-1.5 text-[11px]">Last: {last}</p>
       )}
       {error && (
-        <p className="mt-1 text-[11px] text-red-700 dark:text-red-400">{error}</p>
+        <p className="mt-1 rounded-lg bg-red-50 px-2 py-1.5 text-[11px] font-medium text-red-800 dark:bg-red-950/50 dark:text-red-300">
+          {error}
+        </p>
       )}
     </section>
   );

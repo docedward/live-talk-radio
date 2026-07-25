@@ -10,6 +10,7 @@ Live Talk Radio: one host per talk-show room, many rooms live at once; moderated
 - Public HTTPS share (Render / tunnel), sticky room link + Share/Copy
 - Host soundboard (12 short real WAVs): host-only pads, whole room hears
 - **Build day 2026-07-25:** contrast helpers; **Clip Board** (upload ads/prerecords → LiveKit track); **Just listen** mode; **Applause emote rail** (LiveKit data, not chat)
+- **Phase 2:** mic color filters (Clean/Radio/Phone); clip harden (Stop, mic duck, clearer errors, duration)
 - Auto room sound on join + single speaker Mute
 - One-tap Request On Air; leave panel / Exit room
 - Council: foundation keep/extend; park mods/CC/record

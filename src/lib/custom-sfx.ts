@@ -66,8 +66,13 @@ export async function decodeAndNormalizeClip(file: File): Promise<{
   samples: Float32Array;
   duration: number;
 }> {
+  if (!file || file.size === 0) {
+    throw new Error("Empty file — pick an audio clip (mp3, wav, m4a, ogg)");
+  }
   if (file.size > MAX_FILE_BYTES) {
-    throw new Error("File too large (max 8 MB)");
+    throw new Error(
+      `File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max 8 MB — trim or compress the clip.`
+    );
   }
   const raw = await file.arrayBuffer();
   const ac = getAc();
@@ -76,16 +81,20 @@ export async function decodeAndNormalizeClip(file: File): Promise<{
     decoded = await ac.decodeAudioData(raw.slice(0));
   } catch {
     void ac.close().catch(() => undefined);
-    throw new Error("Could not decode that audio file");
+    throw new Error(
+      "Could not decode that file. Use mp3, wav, m4a, or ogg (not video-only)."
+    );
   }
 
   if (decoded.duration > MAX_CLIP_SECONDS) {
     void ac.close().catch(() => undefined);
-    throw new Error(`Clip too long (max ${MAX_CLIP_SECONDS}s)`);
+    throw new Error(
+      `Clip is ${decoded.duration.toFixed(0)}s — max ${MAX_CLIP_SECONDS}s for ads/prerecords. Trim it shorter.`
+    );
   }
   if (decoded.duration < 0.05) {
     void ac.close().catch(() => undefined);
-    throw new Error("Clip too short");
+    throw new Error("Clip too short — need at least a short sting");
   }
 
   // Mix to mono
