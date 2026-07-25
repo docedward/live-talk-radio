@@ -517,17 +517,23 @@ function LiveKitSfxListener() {
           return;
         }
         if (topic === "trl-emote") return;
-        if (msg.type !== "sfx" || !msg.sound || !isHostSfxId(msg.sound)) return;
+        if (msg.type !== "sfx" || !msg.sound) return;
+        const soundId = msg.sound;
+        if (!isHostSfxId(soundId)) return;
         // Host already played on button press (server sendData is not "local")
         if (participant?.isLocal || isHostLocalSfxQuietPeriod()) return;
         // Global dedupe (REST poll + data packet + races)
         if (msg.id) {
           if (!claimSfxEventId(msg.id)) return;
-        } else if (!claimSfxEventId(`lk-${msg.sound}-${Math.floor(Date.now() / 500)}`)) {
+        } else if (
+          !claimSfxEventId(`lk-${soundId}-${Math.floor(Date.now() / 500)}`)
+        ) {
           return;
         }
         if (isRoomOutputMuted()) return;
-        void unlockRoomAudio().then(() => playHostSfx(msg.sound!));
+        void unlockRoomAudio().then(() => {
+          void playHostSfx(soundId);
+        });
       } catch {
         /* ignore */
       }
