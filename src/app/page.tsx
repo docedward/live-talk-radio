@@ -1,5 +1,4 @@
 import { CreateRoomForm } from "@/components/CreateRoomForm";
-import { PublicStartBanner } from "@/components/PublicStartBanner";
 import { RoomList } from "@/components/RoomList";
 
 export default function HomePage() {
@@ -13,13 +12,10 @@ export default function HomePage() {
           Start a show
         </h1>
         <p className="max-w-2xl text-base text-[#6b5a48]">
-          One public link for Mac, phone, and remote guests. Create a room,
-          tap <strong className="text-[#1c1410]">Share link</strong> — it
-          always sends the public HTTPS address (not localhost).
+          Create a room, then use <strong className="text-[#1c1410]">Share</strong>{" "}
+          in the room to invite listeners and panel guests.
         </p>
       </header>
-
-      <PublicStartBanner />
 
       <div className="grid items-start gap-6 lg:grid-cols-2">
         <CreateRoomForm />
