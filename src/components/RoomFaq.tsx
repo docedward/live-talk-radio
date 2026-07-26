@@ -88,6 +88,7 @@ export function RoomFaq({ open, onClose, role = "listener" }: Props) {
               "Show board: optional “this week” note and day-of cancel/late notice.",
               "Tap a green panel name to mute or unmute. Remove drops them.",
               "Exit leaves the show open (a panel member may become host). End show closes it for everyone.",
+              "Optional durable host page: claim a handle at create (e.g. /h/dred). Listeners open that sticky link; Live now appears when you are on air.",
             ]}
           />
 

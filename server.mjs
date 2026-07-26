@@ -8,7 +8,7 @@
 
 import { createServer } from "http";
 import { parse } from "url";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import next from "next";
@@ -45,6 +45,156 @@ function loadEnvFile(filePath) {
 
 loadEnvFile(resolve(__dirname, ".env.local"));
 loadEnvFile(resolve(__dirname, ".env"));
+
+// --- Durable host skin (Phase C): JSON file, survives process restarts when disk persists ---
+const DATA_DIR = resolve(__dirname, ".data");
+const HOSTS_FILE = resolve(DATA_DIR, "hosts.json");
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** @type {Map<string, object>} */
+const hostsBySlug = new Map();
+
+function loadHostsFromDisk() {
+  try {
+    if (!existsSync(HOSTS_FILE)) return;
+    const raw = JSON.parse(readFileSync(HOSTS_FILE, "utf8"));
+    if (raw && typeof raw === "object") {
+      for (const [slug, row] of Object.entries(raw)) {
+        hostsBySlug.set(String(slug).toLowerCase(), row);
+      }
+    }
+  } catch (err) {
+    console.warn("host store load:", err instanceof Error ? err.message : err);
+  }
+}
+
+function saveHostsToDisk() {
+  try {
+    mkdirSync(DATA_DIR, { recursive: true });
+    const obj = Object.fromEntries(hostsBySlug.entries());
+    writeFileSync(HOSTS_FILE, JSON.stringify(obj, null, 2), "utf8");
+  } catch (err) {
+    console.warn("host store save:", err instanceof Error ? err.message : err);
+  }
+}
+
+loadHostsFromDisk();
+
+function normalizeSlug(raw) {
+  const s = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 32);
+  if (s.length < 2) throw new Error("Handle must be at least 2 characters");
+  if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]{2}$/.test(s)) {
+    throw new Error("Handle: letters, numbers, hyphens only");
+  }
+  return s;
+}
+
+function publicHostProfile(row) {
+  const live =
+    row.liveRoomId && rooms.has(row.liveRoomId) ? row.liveRoomId : null;
+  // Clear stale live link
+  if (row.liveRoomId && !live) {
+    row.liveRoomId = null;
+    saveHostsToDisk();
+  }
+  return {
+    slug: row.slug,
+    displayName: row.displayName,
+    weeklyBulletin: row.weeklyBulletin || "",
+    dayNotice: row.dayNotice || "",
+    liveRoomId: live,
+    liveUrl: live ? `/room/${live}` : null,
+    updatedAt: row.updatedAt || null,
+  };
+}
+
+function createHostIdentity(slugRaw, displayName) {
+  const slug = normalizeSlug(slugRaw);
+  if (hostsBySlug.has(slug)) {
+    throw new Error("That handle is already taken — pick another");
+  }
+  const hostSecret = randomBytes(18).toString("hex");
+  const row = {
+    slug,
+    hostSecret,
+    displayName: String(displayName || slug).trim().slice(0, 40) || slug,
+    weeklyBulletin: "",
+    weeklyBulletinAt: 0,
+    dayNotice: "",
+    liveRoomId: null,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+  hostsBySlug.set(slug, row);
+  saveHostsToDisk();
+  return { slug, hostSecret, displayName: row.displayName };
+}
+
+function requireHostSecret(slugRaw, secret) {
+  const slug = normalizeSlug(slugRaw);
+  const row = hostsBySlug.get(slug);
+  if (!row) throw new Error("Host page not found");
+  if (!secret || secret !== row.hostSecret) {
+    throw new Error("Invalid host secret");
+  }
+  return row;
+}
+
+function updateHostPresence(slugRaw, secret, body) {
+  const row = requireHostSecret(slugRaw, secret);
+  const now = Date.now();
+  if (body.displayName !== undefined) {
+    row.displayName =
+      String(body.displayName || row.displayName).trim().slice(0, 40) ||
+      row.displayName;
+  }
+  if (body.weeklyBulletin !== undefined) {
+    const next = String(body.weeklyBulletin || "").trim().slice(0, 500);
+    const prev = row.weeklyBulletin || "";
+    if (next !== prev) {
+      if (row.weeklyBulletinAt && now - row.weeklyBulletinAt < WEEK_MS) {
+        const days = Math.ceil(
+          (WEEK_MS - (now - row.weeklyBulletinAt)) / (24 * 60 * 60 * 1000)
+        );
+        throw new Error(
+          `Weekly bulletin can only change once a week (try again in ~${days} day${days === 1 ? "" : "s"})`
+        );
+      }
+      row.weeklyBulletin = next;
+      row.weeklyBulletinAt = now;
+    }
+  }
+  if (body.dayNotice !== undefined) {
+    row.dayNotice = String(body.dayNotice || "").trim().slice(0, 200);
+  }
+  row.updatedAt = now;
+  saveHostsToDisk();
+  return publicHostProfile(row);
+}
+
+function linkHostLiveRoom(slugRaw, secret, roomId) {
+  const row = requireHostSecret(slugRaw, secret);
+  row.liveRoomId = roomId || null;
+  row.updatedAt = Date.now();
+  saveHostsToDisk();
+  return publicHostProfile(row);
+}
+
+function clearHostLiveRoom(roomId) {
+  for (const row of hostsBySlug.values()) {
+    if (row.liveRoomId === roomId) {
+      row.liveRoomId = null;
+      row.updatedAt = Date.now();
+      saveHostsToDisk();
+    }
+  }
+}
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOSTNAME || "0.0.0.0";
@@ -254,6 +404,7 @@ function pruneIdleShows() {
     if (n === 0) {
       if (!state.emptySince) state.emptySince = now;
       else if (now - state.emptySince > EMPTY_SHOW_GC_MS) {
+        clearHostLiveRoom(id);
         rooms.delete(id);
         void livekitDeleteRoom(id);
       }
@@ -264,6 +415,7 @@ function pruneIdleShows() {
     if (listeners === 0) {
       if (!state.hostOnlySince) state.hostOnlySince = now;
       else if (now - state.hostOnlySince > HOST_ONLY_IDLE_MS) {
+        clearHostLiveRoom(id);
         rooms.delete(id);
         void livekitDeleteRoom(id);
       }
@@ -356,20 +508,32 @@ function presenceList(state) {
   }));
 }
 
-function createRoom(name) {
+function createRoom(name, opts = {}) {
   const trimmed = String(name || "").trim();
   if (!trimmed) throw new Error("Show name is required");
 
   let id = makeRoomId();
   while (rooms.has(id)) id = makeRoomId();
 
+  let hostSlug = null;
+  let seedBulletin = "";
+  let seedDay = "";
+  if (opts.hostSlug && opts.hostSecret) {
+    const profile = linkHostLiveRoom(opts.hostSlug, opts.hostSecret, id);
+    hostSlug = profile.slug;
+    const host = hostsBySlug.get(hostSlug);
+    seedBulletin = host?.weeklyBulletin || "";
+    seedDay = host?.dayNotice || "";
+  }
+
   const room = {
     id,
     name: trimmed.slice(0, 80),
     hostToken: makeHostToken(),
     createdAt: Date.now(),
-    bulletin: "",
-    dayNotice: "",
+    bulletin: seedBulletin,
+    dayNotice: seedDay,
+    hostSlug: hostSlug || null,
   };
 
   rooms.set(id, {
@@ -542,11 +706,10 @@ function endShow(roomId, hostMemberId) {
   for (const r of livePanelRequests(state)) {
     void livekitSetCanPublish(roomId, r.memberId, false);
   }
-  for (const [id, m] of state.members.entries()) {
-    if (m.role === "host" || true) {
-      void livekitSetCanPublish(roomId, id, false);
-    }
+  for (const [id] of state.members.entries()) {
+    void livekitSetCanPublish(roomId, id, false);
   }
+  clearHostLiveRoom(roomId);
   rooms.delete(roomId);
   // Best-effort tear down LiveKit room
   void livekitDeleteRoom(roomId);
@@ -980,12 +1143,51 @@ async function handleApi(req, res, pathname, query, bodyPromise) {
     }
 
     if (pathname === "/api/rooms" && req.method === "POST") {
-      const room = createRoom(body.name);
+      const room = createRoom(body.name, {
+        hostSlug: body.hostSlug,
+        hostSecret: body.hostSecret,
+      });
       sendJson(res, 200, {
         ok: true,
         roomId: room.id,
         hostToken: room.hostToken,
+        hostSlug: room.hostSlug || null,
       });
+      return true;
+    }
+
+    // POST /api/hosts — claim a durable host handle
+    if (pathname === "/api/hosts" && req.method === "POST") {
+      const created = createHostIdentity(body.slug, body.displayName);
+      sendJson(res, 200, { ok: true, ...created });
+      return true;
+    }
+
+    // GET /api/hosts/:slug — public host page data
+    const hostGet = pathname.match(/^\/api\/hosts\/([^/]+)$/);
+    if (hostGet && req.method === "GET") {
+      const slug = normalizeSlug(decodeURIComponent(hostGet[1]));
+      const row = hostsBySlug.get(slug);
+      if (!row) throw new Error("Host page not found");
+      sendJson(res, 200, { ok: true, host: publicHostProfile(row) });
+      return true;
+    }
+
+    // POST /api/hosts/:slug — update bulletin / day notice (secret required)
+    if (hostGet && req.method === "POST") {
+      const slug = decodeURIComponent(hostGet[1]);
+      const host = updateHostPresence(slug, body.hostSecret, body);
+      // Mirror day notice into live room if linked
+      if (host.liveRoomId && rooms.has(host.liveRoomId)) {
+        const st = rooms.get(host.liveRoomId);
+        if (body.dayNotice !== undefined) {
+          st.room.dayNotice = host.dayNotice;
+        }
+        if (body.weeklyBulletin !== undefined) {
+          st.room.bulletin = host.weeklyBulletin;
+        }
+      }
+      sendJson(res, 200, { ok: true, host });
       return true;
     }
 

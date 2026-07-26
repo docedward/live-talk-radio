@@ -69,11 +69,74 @@ export function fetchRooms() {
   return api<PublicRoom[]>("/api/rooms");
 }
 
-export function createRoom(name: string, hostName: string, avatarId?: string) {
-  return api<{ ok: true; roomId: string; hostToken: string }>("/api/rooms", {
+export function createRoom(
+  name: string,
+  hostName: string,
+  avatarId?: string,
+  hostOpts?: { hostSlug?: string; hostSecret?: string }
+) {
+  return api<{
+    ok: true;
+    roomId: string;
+    hostToken: string;
+    hostSlug?: string | null;
+  }>("/api/rooms", {
     method: "POST",
-    body: JSON.stringify({ name, hostName, avatarId }),
+    body: JSON.stringify({
+      name,
+      hostName,
+      avatarId,
+      hostSlug: hostOpts?.hostSlug,
+      hostSecret: hostOpts?.hostSecret,
+    }),
   });
+}
+
+export type PublicHost = {
+  slug: string;
+  displayName: string;
+  weeklyBulletin: string;
+  dayNotice: string;
+  liveRoomId: string | null;
+  liveUrl: string | null;
+  updatedAt: number | null;
+};
+
+/** Claim a durable host handle (once). Secret is shown once — store it. */
+export function createHostIdentity(slug: string, displayName: string) {
+  return api<{
+    ok: true;
+    slug: string;
+    hostSecret: string;
+    displayName: string;
+  }>("/api/hosts", {
+    method: "POST",
+    body: JSON.stringify({ slug, displayName }),
+  });
+}
+
+export function fetchHost(slug: string) {
+  return api<{ ok: true; host: PublicHost }>(
+    `/api/hosts/${encodeURIComponent(slug)}`
+  );
+}
+
+export function updateHostPage(
+  slug: string,
+  hostSecret: string,
+  fields: {
+    displayName?: string;
+    weeklyBulletin?: string;
+    dayNotice?: string;
+  }
+) {
+  return api<{ ok: true; host: PublicHost }>(
+    `/api/hosts/${encodeURIComponent(slug)}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ hostSecret, ...fields }),
+    }
+  );
 }
 
 /** Host: set bulletin / day-of notice for the live show. */
