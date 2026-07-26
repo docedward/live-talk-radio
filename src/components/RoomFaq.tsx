@@ -57,6 +57,7 @@ export function RoomFaq({ open, onClose, role = "listener" }: Props) {
               "Request on air if you want to speak. Wait for the host to approve.",
               "Chat is optional side talk. The panel is how you join the broadcast.",
               "Applause emojis float for everyone. They are not chat.",
+              "Suggest a handmade craft emote — the host may approve it into the show’s pack.",
               "Nothing is recorded. Take your own notes if you want a memory.",
             ]}
           />
@@ -89,6 +90,7 @@ export function RoomFaq({ open, onClose, role = "listener" }: Props) {
               "Tap a green panel name to mute or unmute. Remove drops them.",
               "Exit leaves the show open (a panel member may become host). End show closes it for everyone.",
               "Optional durable host page: claim a handle at create (e.g. /h/dred). Listeners open that sticky link; Live now appears when you are on air.",
+              "Community craft: approve audience emote ideas into your pack. With a host handle, the pack returns on your next show.",
             ]}
           />
 

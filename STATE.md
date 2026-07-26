@@ -17,11 +17,12 @@ Live Talk Radio: one host per talk-show room, many rooms live at once; moderated
 - **Phase A:** Shows rename, richer cards/jokers, panel-first UX, show bulletin
 - **Phase B:** idle GC, named emotes, on-stage panel presence
 - **Phase C:** durable host skin — `/h/[slug]`, claim handle, weekly bulletin (1×/week), day-of notice, Live now when linked show is up (`.data/hosts.json`)
+- **Phase D:** community craft — audience suggest handmade emotes → host approve; pack on show + durable host skin (max 12); usable only live
 
 ## Next
-- Friend smoke: claim handle → open `/h/slug` → Live now when show starts; End show clears live
+- Friend smoke: suggest craft → host approve → everyone fires craft floats; pack survives on `/h/slug` when handle linked
 - Note: free Render disk may be ephemeral — host store may reset on redeploy
-- Parked: moderators, live CC, show export
+- Parked: moderators, live CC, show export, open emote marketplace
 
 ## Blockers
 - Push needs Dr. Ed credentials if remote deploy desired

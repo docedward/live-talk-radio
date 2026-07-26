@@ -95,6 +95,36 @@ function normalizeSlug(raw) {
   return s;
 }
 
+const MAX_CRAFT_PACK = 12;
+const MAX_CRAFT_PENDING = 20;
+const MAX_CRAFT_PENDING_PER_USER = 3;
+
+/** @returns {string} single emoji / short ZWJ sequence — not free text */
+function normalizeCraftEmoji(raw) {
+  const s = String(raw || "").trim().slice(0, 16);
+  if (!s) throw new Error("Pick an emoji");
+  if (/^[a-zA-Z0-9\s.,!?'"@#_-]+$/.test(s)) {
+    throw new Error("Use an emoji, not plain text");
+  }
+  if (s.length > 12) throw new Error("That emoji is too long");
+  return s;
+}
+
+function publicCraftItem(item) {
+  return {
+    id: item.id,
+    emoji: item.emoji,
+    label: item.label || "",
+    byName: item.byName || "Guest",
+    createdAt: item.createdAt || 0,
+  };
+}
+
+function ensureHostCraftPack(row) {
+  if (!Array.isArray(row.craftPack)) row.craftPack = [];
+  return row.craftPack;
+}
+
 function publicHostProfile(row) {
   const live =
     row.liveRoomId && rooms.has(row.liveRoomId) ? row.liveRoomId : null;
@@ -110,6 +140,7 @@ function publicHostProfile(row) {
     dayNotice: row.dayNotice || "",
     liveRoomId: live,
     liveUrl: live ? `/room/${live}` : null,
+    craftPack: ensureHostCraftPack(row).map(publicCraftItem),
     updatedAt: row.updatedAt || null,
   };
 }
@@ -128,6 +159,7 @@ function createHostIdentity(slugRaw, displayName) {
     weeklyBulletinAt: 0,
     dayNotice: "",
     liveRoomId: null,
+    craftPack: [],
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
@@ -173,9 +205,50 @@ function updateHostPresence(slugRaw, secret, body) {
   if (body.dayNotice !== undefined) {
     row.dayNotice = String(body.dayNotice || "").trim().slice(0, 200);
   }
+  // Host page: drop a craft emote from the durable pack
+  if (body.removeCraftId) {
+    const pack = ensureHostCraftPack(row);
+    const rid = String(body.removeCraftId);
+    row.craftPack = pack.filter((c) => c.id !== rid);
+    // Mirror into live room if linked
+    if (row.liveRoomId && rooms.has(row.liveRoomId)) {
+      const st = rooms.get(row.liveRoomId);
+      st.craftPack = (st.craftPack || []).filter((c) => c.id !== rid);
+    }
+  }
   row.updatedAt = now;
   saveHostsToDisk();
   return publicHostProfile(row);
+}
+
+function persistCraftToHost(hostSlug, item) {
+  if (!hostSlug) return;
+  const row = hostsBySlug.get(hostSlug);
+  if (!row) return;
+  const pack = ensureHostCraftPack(row);
+  if (pack.some((c) => c.id === item.id || c.emoji === item.emoji)) return;
+  if (pack.length >= MAX_CRAFT_PACK) {
+    pack.shift();
+  }
+  pack.push({
+    id: item.id,
+    emoji: item.emoji,
+    label: item.label || "",
+    byName: item.byName || "Guest",
+    createdAt: item.createdAt || Date.now(),
+  });
+  row.updatedAt = Date.now();
+  saveHostsToDisk();
+}
+
+function removeCraftFromHost(hostSlug, craftId) {
+  if (!hostSlug) return;
+  const row = hostsBySlug.get(hostSlug);
+  if (!row) return;
+  const pack = ensureHostCraftPack(row);
+  row.craftPack = pack.filter((c) => c.id !== craftId);
+  row.updatedAt = Date.now();
+  saveHostsToDisk();
 }
 
 function linkHostLiveRoom(slugRaw, secret, roomId) {
@@ -518,12 +591,14 @@ function createRoom(name, opts = {}) {
   let hostSlug = null;
   let seedBulletin = "";
   let seedDay = "";
+  let seedCraft = [];
   if (opts.hostSlug && opts.hostSecret) {
     const profile = linkHostLiveRoom(opts.hostSlug, opts.hostSecret, id);
     hostSlug = profile.slug;
     const host = hostsBySlug.get(hostSlug);
     seedBulletin = host?.weeklyBulletin || "";
     seedDay = host?.dayNotice || "";
+    seedCraft = ensureHostCraftPack(host).map((c) => ({ ...c }));
   }
 
   const room = {
@@ -543,9 +618,116 @@ function createRoom(name, opts = {}) {
     onAirRequests: [],
     members: new Map(),
     lastSfx: null,
+    /** @type {object[]} session craft queue (audience → host) */
+    craftPending: [],
+    /** @type {object[]} approved handmade pack for this show (+ host skin) */
+    craftPack: seedCraft,
   });
 
   return room;
+}
+
+/**
+ * Audience proposes a handmade emote; host approves into the pack.
+ * Live-only: pack is usable during the show; durable if host skin linked.
+ */
+function submitCraftEmote(roomId, memberId, { emoji, label }) {
+  const { state, member } = requireMember(roomId, memberId);
+  if (!state.craftPending) state.craftPending = [];
+  if (!state.craftPack) state.craftPack = [];
+
+  const pending = state.craftPending.filter((c) => c.status === "pending");
+  if (pending.length >= MAX_CRAFT_PENDING) {
+    throw new Error("Craft queue is full — try again later");
+  }
+  const mine = pending.filter((c) => c.memberId === memberId);
+  if (mine.length >= MAX_CRAFT_PENDING_PER_USER) {
+    throw new Error("You already have pending craft ideas — wait for the host");
+  }
+
+  const em = normalizeCraftEmoji(emoji);
+  const lab = String(label || "")
+    .trim()
+    .slice(0, 24);
+  // Dedupe against pack + pending same emoji
+  if (state.craftPack.some((c) => c.emoji === em)) {
+    throw new Error("That craft is already in the pack");
+  }
+  if (pending.some((c) => c.emoji === em)) {
+    throw new Error("That craft is already waiting for approval");
+  }
+
+  const item = {
+    id: randomUUID(),
+    roomId,
+    emoji: em,
+    label: lab,
+    byName: member.displayName,
+    memberId,
+    status: "pending",
+    createdAt: Date.now(),
+  };
+  state.craftPending.push(item);
+
+  // Host submissions auto-approve into the pack (director shortcut)
+  if (member.role === "host") {
+    return approveCraftEmote(roomId, memberId, item.id);
+  }
+  return item;
+}
+
+function approveCraftEmote(roomId, hostMemberId, craftId) {
+  const { state } = requireHostMember(roomId, hostMemberId);
+  if (!state.craftPending) state.craftPending = [];
+  if (!state.craftPack) state.craftPack = [];
+
+  const item = state.craftPending.find((c) => c.id === craftId);
+  if (!item) throw new Error("Craft idea not found");
+  if (item.status !== "pending") throw new Error("Already handled");
+
+  if (state.craftPack.length >= MAX_CRAFT_PACK) {
+    throw new Error(
+      `Craft pack is full (${MAX_CRAFT_PACK}). Remove one before approving.`
+    );
+  }
+  if (state.craftPack.some((c) => c.emoji === item.emoji)) {
+    item.status = "rejected";
+    throw new Error("That craft is already in the pack");
+  }
+
+  item.status = "approved";
+  const approved = {
+    id: item.id,
+    emoji: item.emoji,
+    label: item.label || "",
+    byName: item.byName,
+    createdAt: Date.now(),
+  };
+  state.craftPack.push(approved);
+  persistCraftToHost(state.room.hostSlug, approved);
+  return approved;
+}
+
+function rejectCraftEmote(roomId, hostMemberId, craftId) {
+  const { state } = requireHostMember(roomId, hostMemberId);
+  if (!state.craftPending) state.craftPending = [];
+  const item = state.craftPending.find((c) => c.id === craftId);
+  if (!item) throw new Error("Craft idea not found");
+  if (item.status !== "pending") throw new Error("Already handled");
+  item.status = "rejected";
+  return item;
+}
+
+function removeCraftEmote(roomId, hostMemberId, craftId) {
+  const { state } = requireHostMember(roomId, hostMemberId);
+  if (!state.craftPack) state.craftPack = [];
+  const before = state.craftPack.length;
+  state.craftPack = state.craftPack.filter((c) => c.id !== craftId);
+  if (state.craftPack.length === before) {
+    throw new Error("Craft not in pack");
+  }
+  removeCraftFromHost(state.room.hostSlug, craftId);
+  return { removed: true };
 }
 
 /** Host: weekly-ish bulletin + day-of emergency notice (ephemeral with room). */
@@ -771,6 +953,7 @@ function buildSnapshot(roomId, role) {
       createdAt: state.room.createdAt,
       bulletin: state.room.bulletin || "",
       dayNotice: state.room.dayNotice || "",
+      hostSlug: state.room.hostSlug || null,
     },
     role,
     messages: [...state.messages],
@@ -782,6 +965,7 @@ function buildSnapshot(roomId, role) {
     presence: presenceList(state),
     listenerCount: countListeners(state),
     lastSfx: state.lastSfx || null,
+    craftPack: (state.craftPack || []).map(publicCraftItem),
   };
 }
 
@@ -1093,6 +1277,22 @@ function publicSnapshot(roomId, role, memberId) {
           })
         );
 
+  const craftPendingAll = (state.craftPending || []).filter(
+    (c) => c.status === "pending"
+  );
+  const craftPending =
+    role === "host"
+      ? craftPendingAll.map((c) => ({
+          ...publicCraftItem(c),
+          status: "pending",
+        }))
+      : craftPendingAll
+          .filter((c) => c.memberId === memberId)
+          .map((c) => ({
+            ...publicCraftItem(c),
+            status: "pending",
+          }));
+
   return {
     ...snap,
     onAirRequests: onAirPublic,
@@ -1104,6 +1304,8 @@ function publicSnapshot(roomId, role, memberId) {
     panelCount,
     panelCap: snap.panelCap ?? MAX_PANEL_GUESTS,
     voice: voiceInfo(state, memberId, role),
+    craftPack: (state.craftPack || []).map(publicCraftItem),
+    craftPending,
   };
 }
 
@@ -1339,6 +1541,51 @@ async function handleApi(req, res, pathname, query, bodyPromise) {
         action === "approve" ? "approved" : "rejected"
       );
       sendJson(res, 200, { ok: true, question });
+      return true;
+    }
+
+    // POST /api/rooms/:id/craft — propose handmade emote (host auto-approves)
+    const craftSubmit = pathname.match(/^\/api\/rooms\/([^/]+)\/craft$/);
+    if (craftSubmit && req.method === "POST") {
+      const roomId = decodeURIComponent(craftSubmit[1]);
+      const memberId = sessionIdFrom(req, body);
+      const item = submitCraftEmote(roomId, memberId, {
+        emoji: body.emoji,
+        label: body.label,
+      });
+      const { member } = requireMember(roomId, memberId);
+      sendJson(res, 200, {
+        ok: true,
+        craft: publicCraftItem(item),
+        status: item.status || "approved",
+        snapshot: publicSnapshot(roomId, member.role, memberId),
+      });
+      return true;
+    }
+
+    // POST /api/rooms/:id/craft/:id/(approve|reject|remove)
+    const craftAction = pathname.match(
+      /^\/api\/rooms\/([^/]+)\/craft\/([^/]+)\/(approve|reject|remove)$/
+    );
+    if (craftAction && req.method === "POST") {
+      const roomId = decodeURIComponent(craftAction[1]);
+      const craftId = decodeURIComponent(craftAction[2]);
+      const action = craftAction[3];
+      const memberId = sessionIdFrom(req, body);
+      let result;
+      if (action === "approve") {
+        result = approveCraftEmote(roomId, memberId, craftId);
+      } else if (action === "reject") {
+        result = rejectCraftEmote(roomId, memberId, craftId);
+      } else {
+        result = removeCraftEmote(roomId, memberId, craftId);
+      }
+      const { member } = requireMember(roomId, memberId);
+      sendJson(res, 200, {
+        ok: true,
+        craft: result && result.emoji ? publicCraftItem(result) : result,
+        snapshot: publicSnapshot(roomId, member.role, memberId),
+      });
       return true;
     }
 

@@ -6,6 +6,7 @@
 
 import type {
   ChatMessage,
+  CraftEmote,
   OnAirRequest,
   Question,
   RoomSnapshot,
@@ -99,6 +100,7 @@ export type PublicHost = {
   dayNotice: string;
   liveRoomId: string | null;
   liveUrl: string | null;
+  craftPack: CraftEmote[];
   updatedAt: number | null;
 };
 
@@ -128,6 +130,7 @@ export function updateHostPage(
     displayName?: string;
     weeklyBulletin?: string;
     dayNotice?: string;
+    removeCraftId?: string;
   }
 ) {
   return api<{ ok: true; host: PublicHost }>(
@@ -136,6 +139,39 @@ export function updateHostPage(
       method: "POST",
       body: JSON.stringify({ hostSecret, ...fields }),
     }
+  );
+}
+
+/** Propose a handmade craft emote (host auto-approves into the pack). */
+export function submitCraftEmote(
+  roomId: string,
+  emoji: string,
+  label = ""
+) {
+  return api<{
+    ok: true;
+    craft: CraftEmote;
+    status: string;
+    snapshot: RoomSnapshot;
+  }>(`/api/rooms/${encodeURIComponent(roomId)}/craft`, {
+    method: "POST",
+    body: JSON.stringify({ emoji, label }),
+  });
+}
+
+/** Host: approve / reject pending craft, or remove from pack. */
+export function moderateCraftEmote(
+  roomId: string,
+  craftId: string,
+  action: "approve" | "reject" | "remove"
+) {
+  return api<{
+    ok: true;
+    craft?: CraftEmote | { removed: true };
+    snapshot: RoomSnapshot;
+  }>(
+    `/api/rooms/${encodeURIComponent(roomId)}/craft/${encodeURIComponent(craftId)}/${action}`,
+    { method: "POST", body: JSON.stringify({}) }
   );
 }
 

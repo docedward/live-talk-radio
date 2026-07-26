@@ -98,6 +98,17 @@ export interface Room {
   createdAt: number;
   bulletin?: string;
   dayNotice?: string;
+  hostSlug?: string | null;
+}
+
+/** Host-curated handmade emote (community craft pack). */
+export interface CraftEmote {
+  id: string;
+  emoji: string;
+  label?: string;
+  byName: string;
+  createdAt: number;
+  status?: "pending" | "approved" | "rejected";
 }
 
 /** What the UI needs for a show once someone has joined. */
@@ -110,6 +121,8 @@ export interface RoomSnapshot {
     bulletin?: string;
     /** Day-of cancel / late / reschedule banner. */
     dayNotice?: string;
+    /** Durable host handle when show is linked to /h/[slug]. */
+    hostSlug?: string | null;
   };
   role: Role;
   messages: ChatMessage[];
@@ -135,4 +148,8 @@ export interface RoomSnapshot {
   voice?: VoiceInfo;
   /** Latest host soundboard hit (everyone should play once). */
   lastSfx?: RoomSfxEvent | null;
+  /** Approved handmade emotes for this show (and host skin). */
+  craftPack?: CraftEmote[];
+  /** Pending craft ideas — host sees all; listeners see own only. */
+  craftPending?: CraftEmote[];
 }

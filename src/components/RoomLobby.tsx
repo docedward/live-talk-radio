@@ -732,8 +732,20 @@ export function RoomLobby({ roomId }: Props) {
             panelCap={panelCap}
           />
 
-          {/* 3. Applause */}
-          <EmoteRail myName={displayName || "Guest"} myAvatarId={avatarId} />
+          {/* 3. Applause + community craft */}
+          <EmoteRail
+            roomId={roomId}
+            role={snapshot.role}
+            myName={displayName || "Guest"}
+            myAvatarId={avatarId}
+            craftPack={snapshot.craftPack || []}
+            craftPending={snapshot.craftPending || []}
+            onCraftChange={(pack, pending) =>
+              setSnapshot((s) =>
+                s ? { ...s, craftPack: pack, craftPending: pending } : s
+              )
+            }
+          />
 
           {/* 4. Host tools */}
           {isHost && <HostSoundboard roomId={roomId} />}
@@ -774,7 +786,19 @@ export function RoomLobby({ roomId }: Props) {
       )}
 
       {compact && (
-        <EmoteRail myName={displayName || "Guest"} myAvatarId={avatarId} />
+        <EmoteRail
+          roomId={roomId}
+          role={snapshot.role}
+          myName={displayName || "Guest"}
+          myAvatarId={avatarId}
+          craftPack={snapshot.craftPack || []}
+          craftPending={snapshot.craftPending || []}
+          onCraftChange={(pack, pending) =>
+            setSnapshot((s) =>
+              s ? { ...s, craftPack: pack, craftPending: pending } : s
+            )
+          }
+        />
       )}
     </div>
   );

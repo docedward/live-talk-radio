@@ -72,6 +72,7 @@ export function HostPage({ slug }: Props) {
   async function save(fields: {
     weeklyBulletin?: string;
     dayNotice?: string;
+    removeCraftId?: string;
   }) {
     if (!secret) return;
     setBusy(true);
@@ -82,7 +83,7 @@ export function HostPage({ slug }: Props) {
       setHost(res.host);
       setBulletin(res.host.weeklyBulletin || "");
       setDayNotice(res.host.dayNotice || "");
-      setNote("Saved");
+      setNote(fields.removeCraftId ? "Craft removed" : "Saved");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
     } finally {
@@ -158,6 +159,44 @@ export function HostPage({ slug }: Props) {
           </p>
         ) : (
           <p className="mt-2 text-sm text-[#6b5a48]">No weekly note yet.</p>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-[#d4c4a8] bg-[#fffdf8] p-4">
+        <h2 className="text-sm font-semibold text-[#1c1410]">
+          Community craft
+        </h2>
+        <p className="mt-1 text-[11px] text-[#4a3728]">
+          Host-approved handmade emotes. Usable only while a show is live.
+        </p>
+        {(host.craftPack || []).length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(host.craftPack || []).map((c) => (
+              <div
+                key={c.id}
+                className="flex flex-col items-center gap-0.5 rounded-xl border border-[#d4c4a8] bg-white px-2 py-1.5"
+              >
+                <span className="text-2xl leading-none">{c.emoji}</span>
+                <span className="max-w-[4.5rem] truncate text-[9px] text-[#6b5a48]">
+                  {c.byName}
+                </span>
+                {isOwner && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void save({ removeCraftId: c.id })}
+                    className="text-[10px] font-semibold text-red-800 underline"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-2 text-sm text-[#6b5a48]">
+            No craft emotes yet — suggest them during a live show.
+          </p>
         )}
       </section>
 
